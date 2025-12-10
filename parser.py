@@ -72,6 +72,13 @@ class SteamDBParser:
         """Handle interrupt signals"""
         logger.info("Received interrupt signal, shutting down gracefully...")
         self.running = False
+        # Save checkpoint when signal is received
+        try:
+            if self.checkpoint_manager:
+                self.checkpoint_manager.save_checkpoint()
+                logger.info("Checkpoint saved. You can resume parsing by running the script again.")
+        except Exception as e:
+            logger.error(f"Error saving checkpoint: {e}")
     
     def load_app_ids(self) -> List[int]:
         """Load APP IDs from file"""
@@ -245,6 +252,11 @@ class SteamDBParser:
                         logger.error(f"Error processing batch: {e}")
                         # Continue with next batch even if this one failed
             finally:
+                # Save checkpoint before closing
+                if not self.running:
+                    logger.info("Saving checkpoint before shutdown...")
+                    self.checkpoint_manager.save_checkpoint()
+                
                 # Close SteamCharts parser session
                 if isinstance(self.ccu_parser, SteamChartsParser):
                     await self.ccu_parser.close()
@@ -285,6 +297,11 @@ class SteamDBParser:
                         logger.error(f"Error processing batch: {e}")
                         # Continue with next batch even if this one failed
             finally:
+                # Save checkpoint before closing
+                if not self.running:
+                    logger.info("Saving checkpoint before shutdown...")
+                    self.checkpoint_manager.save_checkpoint()
+                
                 # Return context to pool
                 await self.browser_manager.return_context(context)
                 await self.browser_manager.close()
@@ -300,17 +317,45 @@ class SteamDBParser:
         try:
             asyncio.run(self.run_async())
         except KeyboardInterrupt:
-            logger.info("Interrupted by user")
+            logger.info("Interrupted by user - saving checkpoint...")
+            # Save checkpoint before exiting
+            try:
+                if self.checkpoint_manager:
+                    self.checkpoint_manager.save_checkpoint()
+                    logger.info("Checkpoint saved. You can resume parsing by running the script again.")
+            except Exception as e:
+                logger.error(f"Error saving checkpoint: {e}")
+            
+            # Cleanup
             if self.browser_manager:
-                asyncio.run(self.browser_manager.close())
+                try:
+                    asyncio.run(self.browser_manager.close())
+                except Exception as e:
+                    logger.error(f"Error closing browser manager: {e}")
             if isinstance(self.ccu_parser, SteamChartsParser):
-                asyncio.run(self.ccu_parser.close())
+                try:
+                    asyncio.run(self.ccu_parser.close())
+                except Exception as e:
+                    logger.error(f"Error closing SteamCharts parser: {e}")
         except Exception as e:
             logger.error(f"Fatal error: {e}", exc_info=True)
+            # Try to save checkpoint even on fatal error
+            try:
+                if self.checkpoint_manager:
+                    self.checkpoint_manager.save_checkpoint()
+            except Exception:
+                pass
+            
             if self.browser_manager:
-                asyncio.run(self.browser_manager.close())
+                try:
+                    asyncio.run(self.browser_manager.close())
+                except Exception:
+                    pass
             if isinstance(self.ccu_parser, SteamChartsParser):
-                asyncio.run(self.ccu_parser.close())
+                try:
+                    asyncio.run(self.ccu_parser.close())
+                except Exception:
+                    pass
 
 
 def main():

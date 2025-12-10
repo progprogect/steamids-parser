@@ -43,9 +43,12 @@ def run_parser_in_thread(app_ids_file: Path):
         original_file = config.APP_IDS_FILE
         
         # Копируем загруженный файл в стандартное место
+        # Преобразуем Path в строки для shutil.copy2
         import shutil
-        shutil.copy2(app_ids_file, config.APP_IDS_FILE)
-        logger.info(f"Copied {app_ids_file} to {config.APP_IDS_FILE}")
+        source_path = str(app_ids_file) if isinstance(app_ids_file, Path) else app_ids_file
+        dest_path = str(config.APP_IDS_FILE) if isinstance(config.APP_IDS_FILE, Path) else config.APP_IDS_FILE
+        shutil.copy2(source_path, dest_path)
+        logger.info(f"Copied {source_path} to {dest_path}")
         
         parser_instance = SteamDBParser(data_source='steamcharts')
         parser_instance.run()
@@ -106,7 +109,8 @@ def start_parser():
     
     # Сохраняем файл
     filename = secure_filename(file.filename or 'app_ids.txt')
-    filepath = app.config['UPLOAD_FOLDER'] / filename
+    upload_folder = Path(app.config['UPLOAD_FOLDER'])
+    filepath = upload_folder / filename
     file.save(str(filepath))
     
     logger.info(f"Received app_ids file: {filename}, saved to {filepath}")

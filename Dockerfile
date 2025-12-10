@@ -20,6 +20,7 @@ RUN mkdir -p data logs
 ENV PYTHONUNBUFFERED=1
 ENV LOG_LEVEL=INFO
 
-# Run API server (parser can be started via API)
-CMD ["python3", "api_server.py"]
+# Run API server with gunicorn (parser can be started via API)
+# Railway will use PORT from environment
+CMD ["gunicorn", "--bind", "0.0.0.0:${PORT:-5000}", "--workers", "1", "--threads", "2", "--timeout", "120", "api_server:app"]
 

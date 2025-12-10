@@ -108,7 +108,11 @@ def start_parser():
         }), 400
     
     # Сохраняем файл
-    filename = secure_filename(file.filename or 'app_ids.txt')
+    # Убеждаемся, что filename - строка
+    file_filename = file.filename if file.filename else 'app_ids.txt'
+    if not isinstance(file_filename, str):
+        file_filename = str(file_filename)
+    filename = secure_filename(file_filename)
     upload_folder = Path(app.config['UPLOAD_FOLDER'])
     filepath = upload_folder / filename
     file.save(str(filepath))

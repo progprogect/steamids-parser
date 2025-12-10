@@ -324,4 +324,12 @@ if __name__ == '__main__':
     host = os.getenv('HOST', '0.0.0.0')
     
     logger.info(f"Starting API server on {host}:{port}")
-    app.run(host=host, port=port, debug=False)
+    logger.info(f"Database: PostgreSQL={config.USE_POSTGRESQL}, URL={'set' if config.DATABASE_URL else 'not set'}")
+    
+    # Для production используем gunicorn если доступен, иначе Flask dev server
+    try:
+        import gunicorn.app.wsgiapp as wsgi
+        # Если gunicorn доступен, но мы запускаем напрямую - используем Flask
+        app.run(host=host, port=port, debug=False, threaded=True)
+    except ImportError:
+        app.run(host=host, port=port, debug=False, threaded=True)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Export SteamCharts CCU data to CSV format
-Format: app_id,timestamp,avg_players,peak_players
+Format: ID,datetime,avg_players,peak_players
 """
 import csv
 import sys
@@ -66,8 +66,8 @@ def export_to_csv(db: Database, output_file: Path):
     with open(output_file, 'w', encoding='utf-8', newline='') as f:
         writer = csv.writer(f)
         
-        # Write header
-        writer.writerow(['app_id', 'timestamp', 'avg_players', 'peak_players'])
+        # Write header (формат: ID, datetime, avg_players, peak_players)
+        writer.writerow(['ID', 'datetime', 'avg_players', 'peak_players'])
         
         # Write data rows
         written_rows = 0

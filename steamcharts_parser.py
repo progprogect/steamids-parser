@@ -7,6 +7,8 @@ import time
 from typing import List, Dict, Optional
 from datetime import datetime
 import aiohttp
+from bs4 import BeautifulSoup
+import re
 import config
 
 logger = logging.getLogger(__name__)
@@ -65,31 +67,42 @@ class SteamChartsParser:
     
     async def fetch_ccu_data(self, app_id: int) -> Dict[str, List[Dict]]:
         """
-        Fetch CCU data for a single app_id from SteamCharts API
+        Fetch CCU data for a single app_id from SteamCharts API and HTML page
         
         Returns:
             Dictionary with 'avg' and 'peak' lists of data points
             Format: {'avg': [{'datetime': 'YYYY-MM-DD HH:MM:SS', 'players': int}, ...],
                      'peak': [{'datetime': 'YYYY-MM-DD HH:MM:SS', 'players': int}, ...]}
             
-        Note: Data is saved as-is without aggregation to preserve maximum detail
-        (hourly, daily, monthly - whatever granularity API provides)
+        Note: 
+        - Avg values come from chart-data.json API
+        - Peak values come from HTML page table (more accurate)
+        - Data is saved as-is without aggregation to preserve maximum detail
         """
         async with self.semaphore:
             await self.rate_limiter.acquire()
             
             try:
-                raw_data = await self._fetch_api(app_id)
-                if not raw_data:
-                    logger.debug(f"No data returned for app_id {app_id}")
+                # Fetch average values from API
+                avg_raw_data = await self._fetch_api(app_id)
+                if not avg_raw_data:
+                    logger.debug(f"No API data returned for app_id {app_id}")
                     return {'avg': [], 'peak': []}
                 
-                processed = self._process_raw_data(raw_data)
-                if not processed or (not processed.get('avg') and not processed.get('peak')):
+                # Process average data
+                avg_processed = self._process_raw_data(avg_raw_data, value_type='avg')
+                
+                # Fetch peak values from HTML page
+                peak_data = await self._fetch_peak_from_html(app_id)
+                
+                # Combine avg and peak data by datetime
+                combined = self._combine_avg_peak(avg_processed.get('avg', []), peak_data)
+                
+                if not combined.get('avg') and not combined.get('peak'):
                     logger.debug(f"No processed data for app_id {app_id}")
                     return {'avg': [], 'peak': []}
                 
-                return processed
+                return combined
                 
             except Exception as e:
                 logger.error(f"Error fetching CCU data for app_id {app_id}: {e}", exc_info=True)
@@ -161,22 +174,22 @@ class SteamChartsParser:
         
         return []
     
-    def _process_raw_data(self, data: List[List]) -> Dict[str, List[Dict]]:
+    def _process_raw_data(self, data: List[List], value_type: str = 'avg') -> Dict[str, List[Dict]]:
         """
         Process raw data from API preserving maximum detail (no aggregation)
         
         Args:
             data: List of [timestamp_ms, players] pairs
+            value_type: 'avg' or 'peak' (for logging purposes)
             
         Returns:
-            Dictionary with 'avg' and 'peak' lists containing all data points
+            Dictionary with 'avg' or 'peak' list containing all data points
             Each point is saved as-is with its original timestamp
         """
         if not data:
-            return {'avg': [], 'peak': []}
+            return {value_type: []}
         
-        avg_data = []
-        peak_data = []
+        processed_data = []
         
         for point in data:
             if len(point) < 2:
@@ -197,14 +210,7 @@ class SteamChartsParser:
                 
                 players_value = int(players)
                 
-                # Save each point as both avg and peak (since it's detailed data)
-                # This preserves all available detail: hourly, daily, monthly - whatever API provides
-                avg_data.append({
-                    'datetime': datetime_str,
-                    'players': players_value
-                })
-                
-                peak_data.append({
+                processed_data.append({
                     'datetime': datetime_str,
                     'players': players_value
                 })
@@ -213,10 +219,139 @@ class SteamChartsParser:
                 logger.warning(f"Error processing timestamp {timestamp_ms}: {e}")
                 continue
         
-        logger.debug(f"Processed {len(data)} raw data points: {len(avg_data)} avg points, {len(peak_data)} peak points")
+        logger.debug(f"Processed {len(data)} raw data points as {value_type}: {len(processed_data)} points")
+        
+        return {value_type: processed_data}
+    
+    async def _fetch_peak_from_html(self, app_id: int) -> List[Dict]:
+        """
+        Fetch peak players data from SteamCharts HTML page
+        
+        Returns:
+            List of {'datetime': 'YYYY-MM-DD HH:MM:SS', 'players': int} dicts
+        """
+        html_url = f"https://steamcharts.com/app/{app_id}"
+        
+        try:
+            session = await self._get_session()
+            async with session.get(html_url) as response:
+                if response.status != 200:
+                    logger.warning(f"Failed to fetch HTML for app_id {app_id}: HTTP {response.status}")
+                    return []
+                
+                html_content = await response.text()
+                soup = BeautifulSoup(html_content, 'html.parser')
+                
+                # Find the table with player statistics
+                # Table structure: Month | Avg. Players | Gain | % Gain | Peak Players
+                table = soup.find('table', class_='common-table')
+                
+                if not table:
+                    # Try to find any table with "Peak Players" header
+                    tables = soup.find_all('table')
+                    for t in tables:
+                        headers = t.find_all('th')
+                        if any('peak' in h.get_text().lower() for h in headers):
+                            table = t
+                            break
+                
+                if not table:
+                    logger.warning(f"Could not find statistics table for app_id {app_id}")
+                    return []
+                
+                peak_data = []
+                rows = table.find_all('tr')[1:]  # Skip header row
+                
+                for row in rows:
+                    cells = row.find_all('td')
+                    if len(cells) < 5:  # Need at least 5 columns (Month, Avg, Gain, %Gain, Peak)
+                        continue
+                    
+                    try:
+                        # Parse month/date (first column, index 0)
+                        month_str = cells[0].get_text().strip()
+                        # Parse peak players (fifth column, index 4)
+                        peak_str = cells[4].get_text().strip().replace(',', '')
+                        
+                        if not peak_str or not peak_str.isdigit():
+                            continue
+                        
+                        peak_value = int(peak_str)
+                        
+                        # Convert month string to datetime
+                        # Format can be "November 2025", "Last 30 Days", etc.
+                        try:
+                            # Skip "Last 30 Days" and similar rows
+                            if 'last' in month_str.lower() or 'days' in month_str.lower():
+                                continue
+                            
+                            # Format: "November 2025" or "Nov 2025"
+                            month_str_clean = month_str.strip()
+                            if len(month_str_clean.split()) == 2:
+                                # Try full month name first: "November 2025"
+                                try:
+                                    dt = datetime.strptime(month_str_clean, '%B %Y')
+                                except ValueError:
+                                    # Try abbreviated: "Nov 2025"
+                                    dt = datetime.strptime(month_str_clean, '%b %Y')
+                            elif '-' in month_str_clean:
+                                # Format: "2024-01"
+                                dt = datetime.strptime(month_str_clean, '%Y-%m')
+                            else:
+                                # Try other formats
+                                dt = datetime.strptime(month_str_clean, '%Y-%m-%d')
+                            
+                            # Use first day of month for monthly data
+                            datetime_str = dt.strftime('%Y-%m-01 %H:%M:%S')
+                            
+                            peak_data.append({
+                                'datetime': datetime_str,
+                                'players': peak_value
+                            })
+                        except ValueError as e:
+                            logger.debug(f"Could not parse date '{month_str}' for app_id {app_id}: {e}")
+                            continue
+                            
+                    except (ValueError, IndexError) as e:
+                        logger.debug(f"Error parsing table row for app_id {app_id}: {e}")
+                        continue
+                
+                logger.debug(f"Extracted {len(peak_data)} peak data points from HTML for app_id {app_id}")
+                return peak_data
+                
+        except Exception as e:
+            logger.warning(f"Error fetching peak data from HTML for app_id {app_id}: {e}")
+            return []
+    
+    def _combine_avg_peak(self, avg_data: List[Dict], peak_data: List[Dict]) -> Dict[str, List[Dict]]:
+        """
+        Combine avg and peak data, matching by datetime when possible
+        
+        Args:
+            avg_data: List of avg data points
+            peak_data: List of peak data points
+            
+        Returns:
+            Dictionary with 'avg' and 'peak' lists
+        """
+        # Create datetime-indexed dictionaries for matching
+        avg_dict = {item['datetime']: item['players'] for item in avg_data}
+        peak_dict = {item['datetime']: item['players'] for item in peak_data}
+        
+        # Get all unique datetimes
+        all_datetimes = set(avg_dict.keys()) | set(peak_dict.keys())
+        
+        combined_avg = []
+        combined_peak = []
+        
+        for dt in sorted(all_datetimes):
+            if dt in avg_dict:
+                combined_avg.append({'datetime': dt, 'players': avg_dict[dt]})
+            if dt in peak_dict:
+                combined_peak.append({'datetime': dt, 'players': peak_dict[dt]})
         
         return {
-            'avg': avg_data,
-            'peak': peak_data
+            'avg': combined_avg,
+            'peak': combined_peak
         }
 

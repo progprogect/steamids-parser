@@ -16,9 +16,9 @@ COOKIES_FILE = DATA_DIR / "cookies.json"
 CHECKPOINT_FILE = DATA_DIR / "checkpoint.json"
 
 # Database configuration
-# If DATABASE_URL is set (e.g., from Railway PostgreSQL), use PostgreSQL
+# If DATABASE_URL or DATABASE_PUBLIC_URL is set (e.g., from Railway PostgreSQL), use PostgreSQL
 # Otherwise, use SQLite
-DATABASE_URL = os.getenv("DATABASE_URL")  # PostgreSQL connection string from Railway
+DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("DATABASE_PUBLIC_URL")  # PostgreSQL connection string from Railway
 USE_POSTGRESQL = DATABASE_URL is not None
 
 # Create directories if they don't exist

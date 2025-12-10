@@ -1,0 +1,87 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Database files (will be created in container)
+data/*.db
+data/*.db.backup
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+# Test files
+test_*.py
+*_test.py
+tests/
+
+# Documentation (keep only essential)
+*.md
+!README.md
+
+# Browser extension (not needed for parsing)
+browser_extension/
+*.html
+*.js
+!parser.py
+
+# CSV files (will be generated)
+*.csv
+!steam_app_id_to_scrape_Int64*.csv
+
+# Temporary files
+*.tmp
+*.bak
+*.pid
+parser.pid
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Railway specific
+.railway/
+
+# Environment
+.env
+.env.local

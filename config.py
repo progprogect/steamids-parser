@@ -15,6 +15,12 @@ DATABASE_PATH = DATA_DIR / "steam_data.db"
 COOKIES_FILE = DATA_DIR / "cookies.json"
 CHECKPOINT_FILE = DATA_DIR / "checkpoint.json"
 
+# Database configuration
+# If DATABASE_URL is set (e.g., from Railway PostgreSQL), use PostgreSQL
+# Otherwise, use SQLite
+DATABASE_URL = os.getenv("DATABASE_URL")  # PostgreSQL connection string from Railway
+USE_POSTGRESQL = DATABASE_URL is not None
+
 # Create directories if they don't exist
 DATA_DIR.mkdir(exist_ok=True)
 LOGS_DIR.mkdir(exist_ok=True)
@@ -57,7 +63,17 @@ STEAMDB_API_GRAPH_MAX = f"{STEAMDB_BASE_URL}/api/GetGraphMax"
 # Database batch insert size
 DB_BATCH_SIZE = 1000  # insert records in batches
 
+# SteamCharts API settings
+STEAMCHARTS_API_URL = "https://steamcharts.com/app/{appid}/chart-data.json"
+# Can be overridden via environment variables (useful for Railway)
+STEAMCHARTS_REQUESTS_PER_SECOND = int(os.getenv("STEAMCHARTS_REQUESTS_PER_SECOND", "100"))
+STEAMCHARTS_REQUEST_DELAY = 1.0 / STEAMCHARTS_REQUESTS_PER_SECOND
+STEAMCHARTS_MAX_CONCURRENT = int(os.getenv("STEAMCHARTS_MAX_CONCURRENT", "80"))
+STEAMCHARTS_RETRY_ATTEMPTS = 3
+STEAMCHARTS_RETRY_DELAY = 2.0
+STEAMCHARTS_TIMEOUT = 30
+
 # Logging
 LOG_FILE = LOGS_DIR / "parser.log"
-LOG_LEVEL = "INFO"
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 

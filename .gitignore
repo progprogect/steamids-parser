@@ -22,6 +22,10 @@ data/
 *.json
 !package.json
 
+# Generated CSV files from extension
+batch_*.csv
+batch_mapping.json
+
 # IDE
 .vscode/
 .idea/

@@ -21,6 +21,8 @@ logs/
 data/
 *.json
 !package.json
+!browser_extension/manifest.json
+!browser_extension/manifest_firefox.json
 
 # Generated CSV files from extension
 batch_*.csv

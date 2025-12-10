@@ -1,0 +1,30 @@
+{
+  "manifest_version": 2,
+  "name": "SteamDB Parser Helper",
+  "version": "1.0.0",
+  "description": "Helper extension for SteamDB parser to bypass Cloudflare",
+  "permissions": [
+    "storage",
+    "webRequest",
+    "tabs",
+    "notifications",
+    "https://steamdb.info/*"
+  ],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://steamdb.info/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "browser_action": {
+    "default_popup": "popup.html",
+    "default_title": "SteamDB Parser"
+  }
+}
+
+

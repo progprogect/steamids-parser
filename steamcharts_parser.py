@@ -67,46 +67,39 @@ class SteamChartsParser:
     
     async def fetch_ccu_data(self, app_id: int) -> Dict[str, List[Dict]]:
         """
-        Fetch CCU data for a single app_id from SteamCharts API and HTML page
+        Fetch CCU data for a single app_id from SteamCharts API
         
         Returns:
-            Dictionary with 'avg' and 'peak' lists of data points
-            Format: {'avg': [{'datetime': 'YYYY-MM-DD HH:MM:SS', 'players': int}, ...],
-                     'peak': [{'datetime': 'YYYY-MM-DD HH:MM:SS', 'players': int}, ...]}
+            Dictionary with 'avg' list of data points (only average values)
+            Format: {'avg': [{'datetime': 'YYYY-MM-DD HH:MM:SS', 'players': int}, ...]}
             
         Note: 
-        - Avg values come from chart-data.json API
-        - Peak values come from HTML page table (more accurate)
+        - Only average values are collected from chart-data.json API
         - Data is saved as-is without aggregation to preserve maximum detail
+        - Granularity: hourly, daily, monthly - whatever API provides
         """
         async with self.semaphore:
             await self.rate_limiter.acquire()
             
             try:
                 # Fetch average values from API
-                avg_raw_data = await self._fetch_api(app_id)
-                if not avg_raw_data:
+                raw_data = await self._fetch_api(app_id)
+                if not raw_data:
                     logger.debug(f"No API data returned for app_id {app_id}")
-                    return {'avg': [], 'peak': []}
+                    return {'avg': []}
                 
                 # Process average data
-                avg_processed = self._process_raw_data(avg_raw_data, value_type='avg')
+                processed = self._process_raw_data(raw_data, value_type='avg')
                 
-                # Fetch peak values from HTML page
-                peak_data = await self._fetch_peak_from_html(app_id)
-                
-                # Combine avg and peak data by datetime
-                combined = self._combine_avg_peak(avg_processed.get('avg', []), peak_data)
-                
-                if not combined.get('avg') and not combined.get('peak'):
+                if not processed.get('avg'):
                     logger.debug(f"No processed data for app_id {app_id}")
-                    return {'avg': [], 'peak': []}
+                    return {'avg': []}
                 
-                return combined
+                return processed
                 
             except Exception as e:
                 logger.error(f"Error fetching CCU data for app_id {app_id}: {e}", exc_info=True)
-                return {'avg': [], 'peak': []}
+                return {'avg': []}
     
     async def _fetch_api(self, app_id: int) -> List[List]:
         """

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Export SteamCharts CCU data to CSV format
-Format: ID,datetime,avg_players,peak_players
+Format: ID,datetime,players
+(only average values are exported)
 """
 import csv
 import sys
@@ -34,53 +35,36 @@ def export_to_csv(db: Database, output_file: Path):
     conn = db.get_connection()
     cursor = conn.cursor()
     
-    # Fetch all CCU data with value_type
+    # Fetch only average CCU data (value_type='avg')
     cursor.execute("""
-        SELECT app_id, datetime, players, value_type
+        SELECT app_id, datetime, players
         FROM ccu_history
-        ORDER BY app_id, datetime, value_type
+        WHERE value_type = 'avg' OR value_type IS NULL
+        ORDER BY app_id, datetime
     """)
     
-    # Group data by app_id and datetime
-    # Structure: {(app_id, datetime): {'avg': players, 'peak': players}}
-    data_dict = defaultdict(lambda: {'avg': None, 'peak': None})
-    
-    total_rows = 0
-    for row in cursor.fetchall():
-        app_id = row[0]
-        datetime_str = row[1]
-        players = row[2]
-        value_type = row[3] or 'avg'  # Default to 'avg' for old data
-        
-        key = (app_id, datetime_str)
-        if value_type in ['avg', 'peak']:
-            data_dict[key][value_type] = players
-            total_rows += 1
-    
-    logger.info(f"Loaded {total_rows} records from database")
-    logger.info(f"Grouped into {len(data_dict)} unique (app_id, datetime) pairs")
+    logger.info(f"Loading CCU data from database...")
     
     # Write to CSV
     output_file.parent.mkdir(parents=True, exist_ok=True)
     
+    written_rows = 0
     with open(output_file, 'w', encoding='utf-8', newline='') as f:
         writer = csv.writer(f)
         
-        # Write header (формат: ID, datetime, avg_players, peak_players)
-        writer.writerow(['ID', 'datetime', 'avg_players', 'peak_players'])
+        # Write header (формат: ID, datetime, players)
+        writer.writerow(['ID', 'datetime', 'players'])
         
         # Write data rows
-        written_rows = 0
-        for (app_id, datetime_str), values in sorted(data_dict.items()):
-            avg_players = values['avg'] if values['avg'] is not None else ''
-            peak_players = values['peak'] if values['peak'] is not None else ''
+        for row in cursor.fetchall():
+            app_id = row[0]
+            datetime_str = row[1]
+            players = row[2]
             
-            # Skip rows where both avg and peak are missing
-            if avg_players == '' and peak_players == '':
-                continue
-            
-            writer.writerow([app_id, datetime_str, avg_players, peak_players])
+            writer.writerow([app_id, datetime_str, players])
             written_rows += 1
+    
+    logger.info(f"Loaded {written_rows} records from database")
     
     logger.info(f"Exported {written_rows} rows to {output_file}")
     logger.info("CSV export completed successfully")

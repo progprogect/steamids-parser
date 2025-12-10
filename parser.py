@@ -107,19 +107,13 @@ class SteamDBParser:
                     try:
                         ccu_data_dict = await self.ccu_parser.fetch_ccu_data(app_id)
                         
-                        # Save average and peak data separately
+                        # Save only average data (main focus)
                         avg_data = ccu_data_dict.get('avg', [])
-                        peak_data = ccu_data_dict.get('peak', [])
                         
                         if avg_data:
                             self.database.save_ccu_data(app_id, avg_data, value_type='avg')
-                        if peak_data:
-                            self.database.save_ccu_data(app_id, peak_data, value_type='peak')
-                        
-                        total_records = len(avg_data) + len(peak_data)
-                        if total_records > 0:
-                            self.checkpoint_manager.mark_ccu_done(app_id, total_records)
-                            results['ccu'][app_id] = avg_data + peak_data
+                            self.checkpoint_manager.mark_ccu_done(app_id, len(avg_data))
+                            results['ccu'][app_id] = avg_data
                         else:
                             self.checkpoint_manager.mark_app_error(
                                 app_id, 'ccu', 'No data returned',

@@ -404,23 +404,20 @@ class Database:
         
         param = '%s' if self.use_postgresql else '?'
         
-        cursor.execute("SELECT COUNT(*) FROM app_status")
-        total = cursor.fetchone()[0]
+        def get_count(query, params=None):
+            """Helper to get count value"""
+            cursor.execute(query, params or ())
+            row = cursor.fetchone()
+            if self.use_postgresql and isinstance(row, dict):
+                return list(row.values())[0] if row else 0
+            return row[0] if row else 0
         
-        cursor.execute("SELECT COUNT(*) FROM app_status WHERE status = " + param, ('completed',))
-        completed = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) FROM app_status WHERE status = " + param, ('pending',))
-        pending = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) FROM app_status WHERE status LIKE " + param, ('%error%',))
-        errors = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) FROM ccu_history")
-        ccu_records = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) FROM price_history")
-        price_records = cursor.fetchone()[0]
+        total = get_count("SELECT COUNT(*) FROM app_status")
+        completed = get_count("SELECT COUNT(*) FROM app_status WHERE status = " + param, ('completed',))
+        pending = get_count("SELECT COUNT(*) FROM app_status WHERE status = " + param, ('pending',))
+        errors = get_count("SELECT COUNT(*) FROM app_status WHERE status LIKE " + param, ('%error%',))
+        ccu_records = get_count("SELECT COUNT(*) FROM ccu_history")
+        price_records = get_count("SELECT COUNT(*) FROM price_history")
         
         return {
             'total': total,

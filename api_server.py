@@ -16,8 +16,6 @@ from flask import Flask, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 import config
 from parser import SteamDBParser
-from check_progress import check_progress as get_progress_stats
-from export_full_results import main as export_results
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
@@ -148,20 +146,30 @@ def status():
         # Получаем статистику из БД
         from database import Database
         db = Database()
-        stats = db.get_statistics()
-        db.close()
+        try:
+            stats = db.get_statistics()
+        finally:
+            db.close()
+        
+        total = stats.get('total', 0)
+        completed = stats.get('completed', 0)
+        errors_count = stats.get('errors', 0)
+        
+        progress_percent = 0.0
+        if total > 0:
+            progress_percent = round((completed + errors_count) / total * 100, 2)
         
         return jsonify({
             'parser_running': parser_running,
             'statistics': {
-                'total_apps': stats['total'],
-                'completed': stats['completed'],
-                'pending': stats['pending'],
-                'errors': stats['errors'],
-                'ccu_records': stats['ccu_records'],
-                'price_records': stats['price_records']
+                'total_apps': total,
+                'completed': completed,
+                'pending': stats.get('pending', 0),
+                'errors': errors_count,
+                'ccu_records': stats.get('ccu_records', 0),
+                'price_records': stats.get('price_records', 0)
             },
-            'progress_percent': round((stats['completed'] + stats['errors']) / stats['total'] * 100, 2) if stats['total'] > 0 else 0
+            'progress_percent': progress_percent
         }), 200
     except Exception as e:
         logger.error(f"Error getting status: {e}", exc_info=True)

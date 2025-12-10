@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>SteamDB Parser Launcher</title>
+</head>
+<body>
+    <h1>SteamDB Parser Launcher</h1>
+    <p>Загрузка APP IDs и запуск парсинга...</p>
+    <div id="status">Инициализация...</div>
+    
+    <script>
+        async function loadAppIds() {
+            try {
+                const response = await fetch('app_ids.txt');
+                const text = await response.text();
+                const appIds = text.split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line && /^\d+$/.test(line))
+                    .map(id => parseInt(id));
+                
+                document.getElementById('status').textContent = `Загружено ${appIds.length} APP IDs. Запуск парсинга...`;
+                
+                // Open SteamDB in new tab
+                const steamDbTab = window.open('https://steamdb.info', '_blank');
+                
+                // Wait for page to load, then send message to extension
+                setTimeout(() => {
+                    if (steamDbTab && chrome && chrome.runtime) {
+                        chrome.tabs.query({url: 'https://steamdb.info/*'}, (tabs) => {
+                            if (tabs.length > 0) {
+                                chrome.tabs.sendMessage(tabs[0].id, {
+                                    action: 'startBatchParsing',
+                                    appIds: appIds,
+                                    batchSize: 10
+                                }, (response) => {
+                                    if (chrome.runtime.lastError) {
+                                        console.error('Error:', chrome.runtime.lastError);
+                                        document.getElementById('status').textContent = 
+                                            'Ошибка: Расширение не установлено или не активно. Установите расширение из папки browser_extension';
+                                    } else {
+                                        document.getElementById('status').textContent = 
+                                            `✅ Парсинг запущен для ${appIds.length} APP IDs!`;
+                                    }
+                                });
+                            }
+                        });
+                    } else {
+                        document.getElementById('status').textContent = 
+                            'Откройте SteamDB вручную и используйте расширение для запуска парсинга';
+                    }
+                }, 3000);
+                
+            } catch (error) {
+                document.getElementById('status').textContent = 'Ошибка загрузки файла: ' + error.message;
+            }
+        }
+        
+        // Start loading when page loads
+        window.addEventListener('load', () => {
+            loadAppIds();
+        });
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>SteamDB Batch Processor</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        #status { margin: 20px 0; padding: 10px; background: #f0f0f0; border-radius: 5px; }
+        .progress { margin: 10px 0; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>SteamDB Batch Processor</h1>
+    <p>Этот скрипт будет открывать батчи последовательно. Расширение автоматически соберет данные.</p>
+    
+    <button id="startBtn">🚀 Начать парсинг</button>
+    <button id="stopBtn" disabled>⏹️ Остановить</button>
+    
+    <div id="status">Готов к запуску...</div>
+    <div id="progress" class="progress"></div>
+    
+    <script>
+        let appIds = [];
+        let currentIndex = 0;
+        let batchSize = 10;
+        let isRunning = false;
+        let totalBatches = 0;
+        
+        async function loadAppIds() {
+            try {
+                const response = await fetch('app_ids.txt');
+                const text = await response.text();
+                appIds = text.split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line && /^\d+$/.test(line))
+                    .map(id => parseInt(id));
+                
+                totalBatches = Math.ceil(appIds.length / batchSize);
+                document.getElementById('status').textContent = 
+                    `✅ Загружено ${appIds.length} APP IDs (${totalBatches} батчей)`;
+                return true;
+            } catch (error) {
+                document.getElementById('status').textContent = 
+                    `❌ Ошибка загрузки файла: ${error.message}`;
+                return false;
+            }
+        }
+        
+        async function processNextBatch() {
+            if (!isRunning || currentIndex >= appIds.length) {
+                stopParsing();
+                return;
+            }
+            
+            const batch = appIds.slice(currentIndex, currentIndex + batchSize);
+            const batchNum = Math.floor(currentIndex / batchSize) + 1;
+            
+            // Create Compare URL
+            const compareUrl = `https://steamdb.info/charts/?compare=${batch.join(',')}`;
+            
+            // Update status
+            const progress = ((currentIndex / appIds.length) * 100).toFixed(1);
+            document.getElementById('status').textContent = 
+                `📊 Батч ${batchNum}/${totalBatches}: Обработка ${batch.length} APP IDs...`;
+            document.getElementById('progress').textContent = 
+                `Прогресс: ${currentIndex}/${appIds.length} (${progress}%)`;
+            
+            // Navigate to Compare page
+            window.location.href = compareUrl;
+            
+            // Wait for page to load and API calls
+            await new Promise(resolve => setTimeout(resolve, 15000)); // 15 seconds per batch
+            
+            currentIndex += batchSize;
+            
+            // Process next batch
+            if (isRunning && currentIndex < appIds.length) {
+                setTimeout(processNextBatch, 1000);
+            } else {
+                stopParsing();
+            }
+        }
+        
+        function startParsing() {
+            if (appIds.length === 0) {
+                alert('Сначала загрузите APP IDs!');
+                return;
+            }
+            
+            isRunning = true;
+            currentIndex = 0;
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            
+            // Make sure we're on SteamDB
+            if (!window.location.href.includes('steamdb.info')) {
+                window.location.href = 'https://steamdb.info';
+                setTimeout(processNextBatch, 5000);
+            } else {
+                processNextBatch();
+            }
+        }
+        
+        function stopParsing() {
+            isRunning = false;
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('status').textContent = 
+                `⏹️ Остановлено. Обработано: ${currentIndex}/${appIds.length} APP IDs`;
+        }
+        
+        // Event listeners
+        document.getElementById('startBtn').addEventListener('click', async () => {
+            const loaded = await loadAppIds();
+            if (loaded) {
+                startParsing();
+            }
+        });
+        
+        document.getElementById('stopBtn').addEventListener('click', stopParsing);
+        
+        // Auto-load on page load
+        window.addEventListener('load', () => {
+            loadAppIds();
+        });
+    </script>
+</body>
+</html>
+

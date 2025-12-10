@@ -9,29 +9,25 @@ import config
 
 def export_errors_to_csv(db: Database, output_file: Path):
     """Экспортировать ошибки в CSV файл"""
-    # Используем публичный метод get_connection и создаем cursor
     conn = db.get_connection()
+    
+    # Создаем cursor в зависимости от типа БД
     if db.use_postgresql:
-        from psycopg2.extras import RealDictCursor
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        try:
+            from psycopg2.extras import RealDictCursor
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+        except ImportError:
+            cursor = conn.cursor()
     else:
         cursor = conn.cursor()
     
     # Получаем все записи с ошибками
-    if db.use_postgresql:
-        cursor.execute("""
-            SELECT app_id, status, ccu_error, price_error, ccu_url, price_url, last_updated
-            FROM app_status
-            WHERE status IN ('ccu_error', 'price_error', 'both_error')
-            ORDER BY app_id
-        """)
-    else:
-        cursor.execute("""
-            SELECT app_id, status, ccu_error, price_error, ccu_url, price_url, last_updated
-            FROM app_status
-            WHERE status IN ('ccu_error', 'price_error', 'both_error')
-            ORDER BY app_id
-        """)
+    cursor.execute("""
+        SELECT app_id, status, ccu_error, price_error, ccu_url, price_url, last_updated
+        FROM app_status
+        WHERE status IN ('ccu_error', 'price_error', 'both_error')
+        ORDER BY app_id
+    """)
     
     errors = cursor.fetchall()
     
@@ -46,9 +42,14 @@ def export_errors_to_csv(db: Database, output_file: Path):
         
         for row in errors:
             if db.use_postgresql:
-                writer.writerow([row['app_id'], row['status'], row['ccu_error'], row['price_error'], 
-                               row['ccu_url'], row['price_url'], row['last_updated']])
+                # PostgreSQL возвращает dict-like объект
+                if isinstance(row, dict):
+                    writer.writerow([row['app_id'], row['status'], row['ccu_error'], row['price_error'], 
+                                   row['ccu_url'], row['price_url'], row['last_updated']])
+                else:
+                    writer.writerow(row)
             else:
+                # SQLite возвращает tuple
                 writer.writerow(row)
     
     print(f"✅ Экспортировано {len(errors)} записей с ошибками в {output_file}")

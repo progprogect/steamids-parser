@@ -13,6 +13,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Make start script executable
+RUN chmod +x start_server.sh
+
 # Create data and logs directories
 RUN mkdir -p data logs
 
@@ -21,7 +24,7 @@ ENV PYTHONUNBUFFERED=1
 ENV LOG_LEVEL=INFO
 
 # Run API server with gunicorn (parser can be started via API)
-# Railway will use PORT from environment variable
-# Use shell form to allow variable expansion
-CMD gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --threads 2 --timeout 120 api_server:app
+# Railway автоматически устанавливает PORT в переменных окружения
+# Используем скрипт для правильной обработки PORT
+CMD ["./start_server.sh"]
 

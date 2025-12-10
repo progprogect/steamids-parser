@@ -58,9 +58,15 @@ class SteamDBParser:
         self.progress_tracker = None
         self.running = True
         
-        # Setup signal handlers
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
+        # Setup signal handlers only in main thread
+        # Signal handlers don't work in threads, so we skip them when running in a thread
+        try:
+            signal.signal(signal.SIGINT, self._signal_handler)
+            signal.signal(signal.SIGTERM, self._signal_handler)
+        except ValueError:
+            # Signal handlers can only be set in main thread
+            # This is expected when running in a thread (e.g., from API server)
+            logger.debug("Signal handlers skipped (running in thread)")
     
     def _signal_handler(self, signum, frame):
         """Handle interrupt signals"""

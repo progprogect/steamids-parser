@@ -36,11 +36,12 @@ def export_to_csv(db: Database, output_file: Path):
     cursor = conn.cursor()
     
     # Fetch only average CCU data (value_type='avg')
+    # Включаем записи с NULL значениями (для APP IDs с ошибками)
     cursor.execute("""
         SELECT app_id, datetime, players
         FROM ccu_history
         WHERE value_type = 'avg' OR value_type IS NULL
-        ORDER BY app_id, datetime
+        ORDER BY app_id, datetime NULLS LAST
     """)
     
     logger.info(f"Loading CCU data from database...")
@@ -49,6 +50,7 @@ def export_to_csv(db: Database, output_file: Path):
     output_file.parent.mkdir(parents=True, exist_ok=True)
     
     written_rows = 0
+    null_rows = 0
     with open(output_file, 'w', encoding='utf-8', newline='') as f:
         writer = csv.writer(f)
         
@@ -58,11 +60,14 @@ def export_to_csv(db: Database, output_file: Path):
         # Write data rows
         for row in cursor.fetchall():
             app_id = row[0]
-            datetime_str = row[1]
-            players = row[2]
+            datetime_str = row[1] if row[1] is not None else ''
+            players = row[2] if row[2] is not None else ''
             
             writer.writerow([app_id, datetime_str, players])
             written_rows += 1
+            
+            if datetime_str == '' or players == '':
+                null_rows += 1
     
     logger.info(f"Loaded {written_rows} records from database")
     

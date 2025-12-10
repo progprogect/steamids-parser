@@ -21,6 +21,7 @@ ENV PYTHONUNBUFFERED=1
 ENV LOG_LEVEL=INFO
 
 # Run API server with gunicorn (parser can be started via API)
-# Railway will use PORT from environment
-CMD ["gunicorn", "--bind", "0.0.0.0:${PORT:-5000}", "--workers", "1", "--threads", "2", "--timeout", "120", "api_server:app"]
+# Railway will use PORT from environment variable
+# Use shell form to allow variable expansion
+CMD gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --threads 2 --timeout 120 api_server:app
 

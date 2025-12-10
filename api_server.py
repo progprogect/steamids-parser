@@ -61,10 +61,24 @@ def run_parser_in_thread(app_ids_file: Path):
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint"""
-    return jsonify({
-        'status': 'ok',
-        'parser_running': parser_running
-    })
+    try:
+        # Проверяем подключение к БД
+        from database import Database
+        db = Database()
+        db_ok = db.use_postgresql or db.db_path.exists()
+        db.close()
+        
+        return jsonify({
+            'status': 'ok',
+            'parser_running': parser_running,
+            'database_connected': db_ok,
+            'postgresql': config.USE_POSTGRESQL
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
 
 
 @app.route('/start', methods=['POST'])

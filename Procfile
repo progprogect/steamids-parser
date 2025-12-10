@@ -1,3 +1,3 @@
-web: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120 api_server:app
+web: python3 start_gunicorn.py
 worker: python3 parser.py
 

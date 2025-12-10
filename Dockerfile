@@ -25,6 +25,6 @@ ENV LOG_LEVEL=INFO
 
 # Run API server with gunicorn (parser can be started via API)
 # Railway автоматически устанавливает PORT в переменных окружения
-# Используем скрипт для правильной обработки PORT
-CMD ["./start_server.sh"]
+# Используем Python скрипт для правильной обработки PORT
+CMD ["python3", "start_gunicorn.py"]
 

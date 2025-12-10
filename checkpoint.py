@@ -22,19 +22,22 @@ class CheckpointManager:
     def initialize_app_ids(self, app_ids: List[int]):
         """Initialize APP IDs in database if not already present"""
         conn = self.database.get_connection()
-        cursor = conn.cursor()
+        use_postgresql = self.database.use_postgresql
+        
+        # Используем правильный placeholder в зависимости от БД
+        param = '%s' if use_postgresql else '?'
         
         initialized = 0
         for app_id in app_ids:
             # Check if app_id already exists
-            cursor.execute("SELECT app_id FROM app_status WHERE app_id = ?", (app_id,))
+            query = f"SELECT app_id FROM app_status WHERE app_id = {param}"
+            cursor = conn.cursor()
+            cursor.execute(query, (app_id,))
             if not cursor.fetchone():
                 # Insert as pending
-                cursor.execute(
-                    """INSERT INTO app_status (app_id, status, last_updated) 
-                       VALUES (?, 'pending', ?)""",
-                    (app_id, datetime.now().isoformat())
-                )
+                insert_query = f"""INSERT INTO app_status (app_id, status, last_updated) 
+                       VALUES ({param}, 'pending', {param})"""
+                cursor.execute(insert_query, (app_id, datetime.now().isoformat()))
                 initialized += 1
         
         conn.commit()

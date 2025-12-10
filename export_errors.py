@@ -9,22 +9,35 @@ import config
 
 def export_errors_to_csv(db: Database, output_file: Path):
     """Экспортировать ошибки в CSV файл"""
+    # Используем публичный метод get_connection и создаем cursor
     conn = db.get_connection()
-    cursor = conn.cursor()
+    if db.use_postgresql:
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        cursor = conn.cursor()
     
     # Получаем все записи с ошибками
-    cursor.execute("""
-        SELECT app_id, status, ccu_error, price_error, ccu_url, price_url, last_updated
-        FROM app_status
-        WHERE status IN ('ccu_error', 'price_error', 'both_error')
-        ORDER BY app_id
-    """)
+    if db.use_postgresql:
+        cursor.execute("""
+            SELECT app_id, status, ccu_error, price_error, ccu_url, price_url, last_updated
+            FROM app_status
+            WHERE status IN ('ccu_error', 'price_error', 'both_error')
+            ORDER BY app_id
+        """)
+    else:
+        cursor.execute("""
+            SELECT app_id, status, ccu_error, price_error, ccu_url, price_url, last_updated
+            FROM app_status
+            WHERE status IN ('ccu_error', 'price_error', 'both_error')
+            ORDER BY app_id
+        """)
     
     errors = cursor.fetchall()
     
     if not errors:
         print("✅ Нет ошибок для экспорта")
-        return
+        return 0
     
     # Записываем в CSV
     with open(output_file, 'w', encoding='utf-8', newline='') as f:
@@ -32,9 +45,14 @@ def export_errors_to_csv(db: Database, output_file: Path):
         writer.writerow(['app_id', 'status', 'ccu_error', 'price_error', 'ccu_url', 'price_url', 'last_updated'])
         
         for row in errors:
-            writer.writerow(row)
+            if db.use_postgresql:
+                writer.writerow([row['app_id'], row['status'], row['ccu_error'], row['price_error'], 
+                               row['ccu_url'], row['price_url'], row['last_updated']])
+            else:
+                writer.writerow(row)
     
     print(f"✅ Экспортировано {len(errors)} записей с ошибками в {output_file}")
+    return len(errors)
 
 if __name__ == "__main__":
     db = Database()

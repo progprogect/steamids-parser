@@ -20,6 +20,6 @@ RUN mkdir -p data logs
 ENV PYTHONUNBUFFERED=1
 ENV LOG_LEVEL=INFO
 
-# Run parser
-CMD ["python3", "parser.py"]
+# Run API server (parser can be started via API)
+CMD ["python3", "api_server.py"]
 

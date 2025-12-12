@@ -461,24 +461,58 @@ def itad_status():
             
             # Получаем ITAD-специфичную статистику
             cursor = db._get_cursor()
+            # Проверяем наличие колонок ITAD
             if db.use_postgresql:
                 cursor.execute("""
-                    SELECT 
-                        COUNT(*) FILTER (WHERE status = 'itad_completed') as completed,
-                        COUNT(*) FILTER (WHERE status = 'itad_processing') as processing,
-                        COUNT(*) FILTER (WHERE status = 'itad_error') as errors,
-                        SUM(itad_price_processed) as total_price_records
-                    FROM app_status
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'app_status' AND column_name LIKE 'itad%'
                 """)
             else:
-                cursor.execute("""
-                    SELECT 
-                        SUM(CASE WHEN status = 'itad_completed' THEN 1 ELSE 0 END) as completed,
-                        SUM(CASE WHEN status = 'itad_processing' THEN 1 ELSE 0 END) as processing,
-                        SUM(CASE WHEN status = 'itad_error' THEN 1 ELSE 0 END) as errors,
-                        SUM(itad_price_processed) as total_price_records
-                    FROM app_status
-                """)
+                cursor.execute("PRAGMA table_info(app_status)")
+                itad_columns = [row[1] for row in cursor.fetchall() if 'itad' in row[1].lower()]
+            
+            has_itad_columns = len(cursor.fetchall()) > 0 if db.use_postgresql else len(itad_columns) > 0
+            
+            if has_itad_columns:
+                if db.use_postgresql:
+                    cursor.execute("""
+                        SELECT 
+                            COUNT(*) FILTER (WHERE status = 'itad_completed') as completed,
+                            COUNT(*) FILTER (WHERE status = 'itad_processing') as processing,
+                            COUNT(*) FILTER (WHERE status = 'itad_error') as errors,
+                            COALESCE(SUM(itad_price_processed), 0) as total_price_records
+                        FROM app_status
+                    """)
+                else:
+                    cursor.execute("""
+                        SELECT 
+                            SUM(CASE WHEN status = 'itad_completed' THEN 1 ELSE 0 END) as completed,
+                            SUM(CASE WHEN status = 'itad_processing' THEN 1 ELSE 0 END) as processing,
+                            SUM(CASE WHEN status = 'itad_error' THEN 1 ELSE 0 END) as errors,
+                            COALESCE(SUM(itad_price_processed), 0) as total_price_records
+                        FROM app_status
+                    """)
+            else:
+                # Если колонок нет, используем базовую статистику
+                if db.use_postgresql:
+                    cursor.execute("""
+                        SELECT 
+                            COUNT(*) FILTER (WHERE status = 'itad_completed') as completed,
+                            COUNT(*) FILTER (WHERE status = 'itad_processing') as processing,
+                            COUNT(*) FILTER (WHERE status = 'itad_error') as errors,
+                            0 as total_price_records
+                        FROM app_status
+                    """)
+                else:
+                    cursor.execute("""
+                        SELECT 
+                            SUM(CASE WHEN status = 'itad_completed' THEN 1 ELSE 0 END) as completed,
+                            SUM(CASE WHEN status = 'itad_processing' THEN 1 ELSE 0 END) as processing,
+                            SUM(CASE WHEN status = 'itad_error' THEN 1 ELSE 0 END) as errors,
+                            0 as total_price_records
+                        FROM app_status
+                    """)
             
             row = cursor.fetchone()
             itad_stats = {

@@ -67,3 +67,5 @@ function startDirectParsing(appIds) {
 // Start parsing
 loadAppIdsAndStartParsing();
 
+
+

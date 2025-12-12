@@ -69,9 +69,9 @@ def export_to_csv(db: Database, output_file: Path):
             if datetime_str == '' or players == '':
                 null_rows += 1
     
-    logger.info(f"Loaded {written_rows} records from database")
-    
     logger.info(f"Exported {written_rows} rows to {output_file}")
+    if null_rows > 0:
+        logger.info(f"  Including {null_rows} rows with NULL values (APP IDs with no data)")
     logger.info("CSV export completed successfully")
 
 

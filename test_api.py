@@ -49,3 +49,5 @@ if __name__ == "__main__":
         print("Запустите сервер: python3 api_server.py")
     except Exception as e:
         print(f"❌ Ошибка: {e}")
+
+

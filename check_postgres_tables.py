@@ -80,3 +80,5 @@ if __name__ == "__main__":
         exit(1)
     
     check_tables(database_url)
+
+

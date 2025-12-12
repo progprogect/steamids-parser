@@ -102,3 +102,5 @@ curl -O https://worker-production-19aa.up.railway.app/export?type=errors
    - Улучшено сохранение checkpoint при остановке (Ctrl+C, сигналы)
 
 Все изменения закоммичены и отправлены в GitHub репозиторий для автоматического деплоя на Railway.
+
+

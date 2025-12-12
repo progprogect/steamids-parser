@@ -28,3 +28,5 @@ ENV LOG_LEVEL=INFO
 # Используем Python скрипт для правильной обработки PORT
 CMD ["python3", "start_gunicorn.py"]
 
+
+

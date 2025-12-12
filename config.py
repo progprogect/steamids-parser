@@ -18,7 +18,9 @@ CHECKPOINT_FILE = DATA_DIR / "checkpoint.json"
 # Database configuration
 # If DATABASE_URL or DATABASE_PUBLIC_URL is set (e.g., from Railway PostgreSQL), use PostgreSQL
 # Otherwise, use SQLite
-DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("DATABASE_PUBLIC_URL")  # PostgreSQL connection string from Railway
+DATABASE_PUBLIC_URL_DEFAULT = "postgresql://postgres:uOPRuIMnrxqslboMcXBWmIpREfTwsQnh@switchyard.proxy.rlwy.net:58449/railway"
+DATABASE_PUBLIC_URL = os.getenv("DATABASE_PUBLIC_URL", DATABASE_PUBLIC_URL_DEFAULT)
+DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("DATABASE_PUBLIC_URL") or DATABASE_PUBLIC_URL_DEFAULT  # PostgreSQL connection string from Railway
 USE_POSTGRESQL = DATABASE_URL is not None
 
 # Create directories if they don't exist
@@ -72,6 +74,13 @@ STEAMCHARTS_MAX_CONCURRENT = int(os.getenv("STEAMCHARTS_MAX_CONCURRENT", "80"))
 STEAMCHARTS_RETRY_ATTEMPTS = 3
 STEAMCHARTS_RETRY_DELAY = 2.0
 STEAMCHARTS_TIMEOUT = 30
+
+# ITAD API settings
+ITAD_API_KEY = os.getenv("ITAD_API_KEY", "e717cf2ac561530d8f78cd541560feddbc523c27")  # Get from https://isthereanydeal.com/app/
+ITAD_BATCH_SIZE = 200  # Number of app IDs per batch
+ITAD_REQUEST_DELAY = 0.5  # Delay between requests (seconds)
+ITAD_PARALLEL_THREADS = 10  # Number of parallel threads for history requests
+STEAM_SHOP_ID = 61  # Steam shop ID in ITAD
 
 # Logging
 LOG_FILE = LOGS_DIR / "parser.log"

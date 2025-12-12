@@ -68,3 +68,5 @@ return {
     chartsFound: canvases.length + svgs.length
 };
 
+
+

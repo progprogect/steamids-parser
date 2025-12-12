@@ -9,6 +9,12 @@ from typing import List, Dict, Optional, Tuple
 from pathlib import Path
 import config
 
+# Import config after it's defined
+try:
+    DATABASE_PUBLIC_URL = config.DATABASE_PUBLIC_URL
+except AttributeError:
+    DATABASE_PUBLIC_URL = None
+
 logger = logging.getLogger(__name__)
 
 # Try to import PostgreSQL adapter
@@ -33,8 +39,12 @@ class Database:
     def __init__(self, db_path: Path = None):
         self.db_path = db_path or config.DATABASE_PATH
         self.conn = None
-        self.use_postgresql = config.USE_POSTGRESQL and POSTGRESQL_AVAILABLE
-        self.database_url = config.DATABASE_URL
+        # Check DATABASE_URL from environment or config
+        database_url = os.getenv("DATABASE_URL") or os.getenv("DATABASE_PUBLIC_URL")
+        if not database_url and hasattr(config, 'DATABASE_PUBLIC_URL'):
+            database_url = config.DATABASE_PUBLIC_URL
+        self.database_url = database_url
+        self.use_postgresql = (database_url is not None) and POSTGRESQL_AVAILABLE
         
         if self.use_postgresql:
             logger.info("Using PostgreSQL database")
@@ -240,6 +250,16 @@ class Database:
                     price_url TEXT
                 )
             """)
+            # SQLite doesn't support ALTER TABLE ADD COLUMN IF NOT EXISTS directly
+            # Check if columns exist before adding
+            cursor.execute("PRAGMA table_info(app_status)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'itad_currencies_checked' not in columns:
+                cursor.execute("ALTER TABLE app_status ADD COLUMN itad_currencies_checked TEXT")
+            if 'itad_price_processed' not in columns:
+                cursor.execute("ALTER TABLE app_status ADD COLUMN itad_price_processed INTEGER DEFAULT 0")
+            if 'itad_error' not in columns:
+                cursor.execute("ALTER TABLE app_status ADD COLUMN itad_error TEXT")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_status ON app_status(status)")
         
         # Errors table
@@ -346,6 +366,50 @@ class Database:
             logger.error(f"Error saving Price data for app_id {app_id}: {e}")
             raise
     
+    def save_price_data_batch(self, records: List[Dict]):
+        """
+        Save price data records in batch (multiple app_ids)
+        
+        Args:
+            records: List of dicts with keys: app_id, datetime, price_final, currency_symbol, currency_name
+        """
+        if not records:
+            return
+        
+        conn = self.get_connection()
+        cursor = self._get_cursor()
+        
+        try:
+            values = [
+                (item['app_id'], item['datetime'], item['price_final'], 
+                 item['currency_symbol'], item['currency_name'])
+                for item in records
+            ]
+            
+            for i in range(0, len(values), config.DB_BATCH_SIZE):
+                batch = values[i:i + config.DB_BATCH_SIZE]
+                if self.use_postgresql:
+                    cursor.executemany(
+                        """INSERT INTO price_history 
+                           (app_id, datetime, price_final, currency_symbol, currency_name) 
+                           VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING""",
+                        batch
+                    )
+                else:
+                    cursor.executemany(
+                        """INSERT OR IGNORE INTO price_history 
+                           (app_id, datetime, price_final, currency_symbol, currency_name) 
+                           VALUES (?, ?, ?, ?, ?)""",
+                        batch
+                    )
+            
+            conn.commit()
+            logger.debug(f"Saved {len(records)} Price records in batch")
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Error saving Price data batch: {e}")
+            raise
+    
     def update_app_status(self, app_id: int, status: str, **kwargs):
         """Update app status"""
         conn = self.get_connection()
@@ -356,7 +420,8 @@ class Database:
         values = [status, timestamp]
         
         for key, value in kwargs.items():
-            if key in ['ccu_processed', 'price_processed', 'ccu_error', 'price_error', 'ccu_url', 'price_url']:
+            if key in ['ccu_processed', 'price_processed', 'ccu_error', 'price_error', 'ccu_url', 'price_url',
+                       'itad_currencies_checked', 'itad_price_processed', 'itad_error']:
                 fields.append(key)
                 values.append(value)
         

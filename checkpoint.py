@@ -120,6 +120,17 @@ class CheckpointManager:
                 price_error=error_message,
                 price_url=url
             )
+        elif error_type == 'itad':
+            # ITAD-specific error handling
+            if current_status and current_status.get('status') == 'itad_processing':
+                status = 'itad_error'
+            else:
+                status = 'itad_error'
+            self.database.update_app_status(
+                app_id,
+                status,
+                itad_error=error_message
+            )
         else:
             status = 'both_error'
             self.database.update_app_status(
@@ -134,6 +145,56 @@ class CheckpointManager:
         # Log error to errors table
         self.database.log_error(app_id, error_type, error_message, url)
         logger.warning(f"Marked {error_type} error for app_id {app_id}: {error_message}")
+    
+    def mark_itad_processing(self, app_id: int):
+        """Mark app as being processed by ITAD parser"""
+        self.database.update_app_status(app_id, 'itad_processing')
+        logger.debug(f"Marked app_id {app_id} as ITAD processing")
+    
+    def mark_itad_currencies_checked(self, app_id: int, currencies: List[str]):
+        """Mark currencies as checked for app_id"""
+        currencies_str = ','.join(sorted(currencies))
+        self.database.update_app_status(
+            app_id,
+            'itad_processing',
+            itad_currencies_checked=currencies_str
+        )
+        logger.debug(f"Marked currencies checked for app_id {app_id}: {len(currencies)} currencies")
+    
+    def mark_itad_completed(self, app_id: int, price_count: int):
+        """Mark ITAD parsing as completed for app_id"""
+        self.database.update_app_status(
+            app_id,
+            'itad_completed',
+            itad_price_processed=price_count
+        )
+        logger.debug(f"Marked ITAD completed for app_id {app_id}: {price_count} records")
+    
+    def mark_itad_error(self, app_id: int, error_message: str):
+        """Mark ITAD error for app_id"""
+        self.mark_app_error(app_id, 'itad', error_message)
+    
+    def get_pending_itad_app_ids(self) -> List[int]:
+        """Get list of app IDs pending ITAD processing"""
+        conn = self.database.get_connection()
+        cursor = conn.cursor()
+        
+        # Get apps that haven't been processed by ITAD yet
+        # Use parameterized query for safety
+        if self.database.use_postgresql:
+            cursor.execute("""
+                SELECT app_id FROM app_status 
+                WHERE status NOT IN ('itad_completed', 'itad_error')
+                ORDER BY app_id
+            """)
+        else:
+            cursor.execute("""
+                SELECT app_id FROM app_status 
+                WHERE status NOT IN ('itad_completed', 'itad_error')
+                ORDER BY app_id
+            """)
+        rows = cursor.fetchall()
+        return [row[0] for row in rows]
     
     def get_progress(self) -> Dict:
         """Get parsing progress statistics"""

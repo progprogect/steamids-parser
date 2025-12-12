@@ -28,3 +28,5 @@ echo "   - STEAMCHARTS_REQUESTS_PER_SECOND=100"
 echo "   - STEAMCHARTS_MAX_CONCURRENT=80"
 echo ""
 echo "📖 Подробная инструкция в RAILWAY_DEPLOY.md"
+
+

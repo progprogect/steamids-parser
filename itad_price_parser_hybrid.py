@@ -206,11 +206,13 @@ class ITADPriceParserHybrid:
                 return []
             
             try:
+                # Get history since 2012
+                since_date = getattr(config, 'ITAD_HISTORY_SINCE', '2012-01-01T00:00:00Z')
                 history_data = self.client.get_price_history(
                     uuid, 
                     country, 
                     shops=[config.STEAM_SHOP_ID],
-                    since=config.ITAD_HISTORY_SINCE
+                    since=since_date
                 )
                 
                 if not history_data:

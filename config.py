@@ -80,6 +80,7 @@ ITAD_API_KEY = os.getenv("ITAD_API_KEY", "e717cf2ac561530d8f78cd541560feddbc523c
 ITAD_BATCH_SIZE = 200  # Number of app IDs per batch
 ITAD_REQUEST_DELAY = 0.5  # Delay between requests (seconds)
 ITAD_PARALLEL_THREADS = 10  # Number of parallel threads for history requests
+ITAD_HISTORY_SINCE = "2012-01-01T00:00:00Z"  # Start date for price history
 STEAM_SHOP_ID = 61  # Steam shop ID in ITAD
 
 # Logging

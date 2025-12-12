@@ -406,7 +406,10 @@ class Database:
             conn.commit()
             logger.debug(f"Saved {len(records)} Price records in batch")
         except Exception as e:
-            conn.rollback()
+            try:
+                conn.rollback()
+            except Exception:
+                pass  # Connection might be closed
             logger.error(f"Error saving Price data batch: {e}")
             raise
     

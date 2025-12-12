@@ -461,6 +461,7 @@ def itad_status():
             
             # Получаем ITAD-специфичную статистику
             cursor = db._get_cursor()
+            conn = db.get_connection()
             
             # Пробуем получить статистику с ITAD колонками, если ошибка - используем базовую
             try:
@@ -482,9 +483,11 @@ def itad_status():
                             COALESCE(SUM(itad_price_processed), 0) as total_price_records
                         FROM app_status
                     """)
-            except Exception:
-                # Если колонок нет, используем базовую статистику
+                row = cursor.fetchone()
+            except Exception as e:
+                # Если колонок нет или ошибка, откатываем транзакцию и используем базовую статистику
                 if db.use_postgresql:
+                    conn.rollback()
                     cursor.execute("""
                         SELECT 
                             COUNT(*) FILTER (WHERE status = 'itad_completed') as completed,
@@ -502,14 +505,31 @@ def itad_status():
                             0 as total_price_records
                         FROM app_status
                     """)
+                row = cursor.fetchone()
             
-            row = cursor.fetchone()
-            itad_stats = {
-                'completed': row[0] or 0,
-                'processing': row[1] or 0,
-                'errors': row[2] or 0,
-                'total_price_records': row[3] or 0
-            }
+            # Обрабатываем результат
+            if db.use_postgresql and hasattr(row, '__getitem__'):
+                if isinstance(row, dict):
+                    itad_stats = {
+                        'completed': row.get('completed', 0) or 0,
+                        'processing': row.get('processing', 0) or 0,
+                        'errors': row.get('errors', 0) or 0,
+                        'total_price_records': row.get('total_price_records', 0) or 0
+                    }
+                else:
+                    itad_stats = {
+                        'completed': row[0] or 0,
+                        'processing': row[1] or 0,
+                        'errors': row[2] or 0,
+                        'total_price_records': row[3] or 0
+                    }
+            else:
+                itad_stats = {
+                    'completed': row[0] or 0 if row else 0,
+                    'processing': row[1] or 0 if row else 0,
+                    'errors': row[2] or 0 if row else 0,
+                    'total_price_records': row[3] or 0 if row else 0
+                }
             
         finally:
             db.close()

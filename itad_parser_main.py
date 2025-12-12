@@ -84,13 +84,16 @@ class ITADParserMain:
             # Initialize app IDs in database
             self.checkpoint_manager.initialize_app_ids(app_ids)
             
-            # Get pending app IDs (for resume support)
-            pending_app_ids = self.checkpoint_manager.get_pending_itad_app_ids()
+            # Get pending app IDs only from loaded list (for resume support)
+            # Filter to only process the app_ids we loaded
+            all_pending = self.checkpoint_manager.get_pending_itad_app_ids()
+            pending_app_ids = [app_id for app_id in all_pending if app_id in app_ids]
+            
             if not pending_app_ids:
-                logger.info("No pending app IDs found. All apps already processed.")
+                logger.info("No pending app IDs found in loaded list. All apps already processed.")
                 return
             
-            logger.info(f"Processing {len(pending_app_ids)} app IDs")
+            logger.info(f"Processing {len(pending_app_ids)} app IDs (from {len(app_ids)} loaded)")
             
             # Split into batches
             batch_size = config.ITAD_BATCH_SIZE

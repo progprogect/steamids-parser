@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 # ITAD uses country codes, not currency codes directly
 CURRENCY_TO_COUNTRY = {
     'USD': 'US',      # United States
-    'EUR': 'EU',      # European Union (multiple countries)
+    'EUR': 'DE',      # Germany (EU region - using DE as default)
     'GBP': 'GB',      # United Kingdom
     'RUB': 'RU',      # Russia
     'AUD': 'AU',      # Australia

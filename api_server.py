@@ -461,20 +461,9 @@ def itad_status():
             
             # Получаем ITAD-специфичную статистику
             cursor = db._get_cursor()
-            # Проверяем наличие колонок ITAD
-            if db.use_postgresql:
-                cursor.execute("""
-                    SELECT column_name 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'app_status' AND column_name LIKE 'itad%'
-                """)
-            else:
-                cursor.execute("PRAGMA table_info(app_status)")
-                itad_columns = [row[1] for row in cursor.fetchall() if 'itad' in row[1].lower()]
             
-            has_itad_columns = len(cursor.fetchall()) > 0 if db.use_postgresql else len(itad_columns) > 0
-            
-            if has_itad_columns:
+            # Пробуем получить статистику с ITAD колонками, если ошибка - используем базовую
+            try:
                 if db.use_postgresql:
                     cursor.execute("""
                         SELECT 
@@ -493,7 +482,7 @@ def itad_status():
                             COALESCE(SUM(itad_price_processed), 0) as total_price_records
                         FROM app_status
                     """)
-            else:
+            except Exception:
                 # Если колонок нет, используем базовую статистику
                 if db.use_postgresql:
                     cursor.execute("""

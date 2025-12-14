@@ -86,11 +86,19 @@ class ITADParserMain:
             
             # Get pending app IDs only from loaded list (for resume support)
             # Filter to only process the app_ids we loaded
+            logger.info(f"Getting pending app IDs from database...")
             all_pending = self.checkpoint_manager.get_pending_itad_app_ids()
+            logger.info(f"Found {len(all_pending)} pending app IDs in database")
+            logger.info(f"Loaded {len(app_ids)} app IDs from file")
+            
             pending_app_ids = [app_id for app_id in all_pending if app_id in app_ids]
+            logger.info(f"After filtering: {len(pending_app_ids)} app IDs to process")
             
             if not pending_app_ids:
-                logger.info("No pending app IDs found in loaded list. All apps already processed.")
+                logger.warning(f"No pending app IDs found in loaded list. All apps already processed.")
+                logger.warning(f"Loaded app IDs: {len(app_ids)}, Pending in DB: {len(all_pending)}")
+                logger.warning(f"First 10 loaded: {app_ids[:10]}")
+                logger.warning(f"First 10 pending: {all_pending[:10]}")
                 return
             
             logger.info(f"Processing {len(pending_app_ids)} app IDs (from {len(app_ids)} loaded)")

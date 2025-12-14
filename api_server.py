@@ -384,28 +384,32 @@ def start_itad_parser():
             'status': 'running'
         }), 400
     
-    # Проверяем наличие файла в запросе
-    if 'file' not in request.files:
-        return jsonify({
-            'error': 'No file provided. Please upload app_ids.txt file'
-        }), 400
-    
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({
-            'error': 'No file selected'
-        }), 400
-    
-    # Сохраняем файл
-    file_filename = file.filename if file.filename else 'app_ids.txt'
-    if not isinstance(file_filename, str):
-        file_filename = str(file_filename)
-    filename = secure_filename(file_filename)
+    # Проверяем наличие файла в запросе или используем существующий
     upload_folder = Path(app.config['UPLOAD_FOLDER'])
-    filepath = upload_folder / filename
-    file.save(str(filepath))
+    filepath = None
+    filename = 'app_ids.txt'
     
-    logger.info(f"Received app_ids file for ITAD parser: {filename}, saved to {filepath}")
+    if 'file' in request.files and request.files['file'].filename:
+        # Файл загружен в запросе
+        file = request.files['file']
+        file_filename = file.filename if file.filename else 'app_ids.txt'
+        if not isinstance(file_filename, str):
+            file_filename = str(file_filename)
+        filename = secure_filename(file_filename)
+        filepath = upload_folder / filename
+        file.save(str(filepath))
+        logger.info(f"Received app_ids file for ITAD parser: {filename}, saved to {filepath}")
+    else:
+        # Используем существующий файл из стандартного места
+        default_filepath = Path(config.APP_IDS_FILE)
+        if default_filepath.exists():
+            filepath = default_filepath
+            filename = default_filepath.name
+            logger.info(f"Using existing app_ids file: {filepath}")
+        else:
+            return jsonify({
+                'error': 'No file provided and no existing app_ids.txt found. Please upload app_ids.txt file'
+            }), 400
     
     # Проверяем формат файла
     try:

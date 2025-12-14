@@ -34,7 +34,7 @@ class ITADAPIClient:
         
         # Rate limiting
         self.last_request_time = 0
-        self.min_request_interval = 0.5  # 2 requests per second max
+        self.min_request_interval = 1.0  # 1 request per second max (reduced to avoid 429 errors)
     
     def _rate_limit(self):
         """Apply rate limiting"""
@@ -245,21 +245,20 @@ class ITADAPIClient:
         response = self._request('/lookup/id/shop/61/v1', method='POST', json_body=formatted_ids)
         return response
     
-    def _request(self, endpoint: str, params: Dict = None, method: str = 'GET', json_body: List = None) -> Optional[Dict]:
+    def _request(self, endpoint: str, params: Dict = None, method: str = 'GET', json_body: List = None, max_retries: int = 3) -> Optional[Dict]:
         """
-        Make API request
+        Make API request with retry logic for rate limiting
         
         Args:
             endpoint: API endpoint (without base URL)
             params: Query parameters
             method: HTTP method
             json_body: JSON body for POST requests (list of UUIDs or game IDs)
+            max_retries: Maximum number of retries for 429 errors
             
         Returns:
             JSON response or None on error
         """
-        self._rate_limit()
-        
         url = f"{self.BASE_URL}{endpoint}"
         if params is None:
             params = {}
@@ -268,29 +267,60 @@ class ITADAPIClient:
         if self.api_key:
             params['key'] = self.api_key
         
-        try:
-            if method == 'GET':
-                response = self.session.get(url, params=params, timeout=30)
-            elif method == 'POST':
-                if json_body:
-                    response = self.session.post(url, params=params, json=json_body, timeout=30)
+        for attempt in range(max_retries):
+            self._rate_limit()
+            
+            try:
+                if method == 'GET':
+                    response = self.session.get(url, params=params, timeout=30)
+                elif method == 'POST':
+                    if json_body:
+                        response = self.session.post(url, params=params, json=json_body, timeout=30)
+                    else:
+                        response = self.session.post(url, params=params, json=params, timeout=30)
                 else:
-                    response = self.session.post(url, params=params, json=params, timeout=30)
-            else:
-                raise ValueError(f"Unsupported method: {method}")
-            
-            response.raise_for_status()
-            return response.json()
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"API request failed: {e}")
-            if hasattr(e, 'response') and e.response is not None:
-                try:
-                    error_detail = e.response.json()
-                    logger.error(f"Error details: {error_detail}")
-                except:
-                    logger.error(f"Response text: {e.response.text[:500]}")
-            return None
+                    raise ValueError(f"Unsupported method: {method}")
+                
+                # Handle 429 Too Many Requests
+                if response.status_code == 429:
+                    retry_after = int(response.headers.get('Retry-After', 60))  # Default 60 seconds
+                    wait_time = retry_after * (attempt + 1)  # Exponential backoff
+                    logger.warning(f"Rate limited (429). Waiting {wait_time} seconds before retry {attempt + 1}/{max_retries}")
+                    time.sleep(wait_time)
+                    continue
+                
+                response.raise_for_status()
+                return response.json()
+                
+            except requests.exceptions.HTTPError as e:
+                if hasattr(e, 'response') and e.response is not None and e.response.status_code == 429:
+                    retry_after = int(e.response.headers.get('Retry-After', 60))
+                    wait_time = retry_after * (attempt + 1)
+                    logger.warning(f"Rate limited (429). Waiting {wait_time} seconds before retry {attempt + 1}/{max_retries}")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    logger.error(f"API request failed: {e}")
+                    if hasattr(e, 'response') and e.response is not None:
+                        try:
+                            error_detail = e.response.json()
+                            logger.error(f"Error details: {error_detail}")
+                        except:
+                            logger.error(f"Response text: {e.response.text[:500]}")
+                    return None
+            except requests.exceptions.RequestException as e:
+                logger.error(f"API request failed: {e}")
+                if hasattr(e, 'response') and e.response is not None:
+                    try:
+                        error_detail = e.response.json()
+                        logger.error(f"Error details: {error_detail}")
+                    except:
+                        logger.error(f"Response text: {e.response.text[:500]}")
+                return None
+        
+        # All retries exhausted
+        logger.error(f"Failed after {max_retries} retries for {endpoint}")
+        return None
     
     def get_game_info(self, game_id: int) -> Optional[Dict]:
         """

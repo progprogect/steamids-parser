@@ -4,6 +4,7 @@ Stage 1: Storelow (batched) to determine available currencies
 Stage 2: History (parallel) only for available currencies
 """
 import logging
+import time
 from typing import List, Dict, Optional, Set
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -156,6 +157,9 @@ class ITADPriceParserHybrid:
             
             try:
                 # Storelow request for entire batch (batched!)
+                # Add delay between storelow requests to avoid rate limiting
+                time.sleep(config.ITAD_REQUEST_DELAY)
+                
                 storelow_result = self.client.get_store_lowest_prices(
                     app_ids, 
                     country=country, 

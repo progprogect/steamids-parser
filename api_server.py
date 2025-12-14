@@ -359,16 +359,24 @@ def run_itad_parser_in_thread(app_ids_file: Path):
         import shutil
         source_path = str(app_ids_file) if isinstance(app_ids_file, Path) else app_ids_file
         dest_path = str(config.APP_IDS_FILE) if isinstance(config.APP_IDS_FILE, Path) else config.APP_IDS_FILE
-        shutil.copy2(source_path, dest_path)
-        logger.info(f"Copied {source_path} to {dest_path}")
         
+        logger.info(f"Copying file from {source_path} to {dest_path}")
+        shutil.copy2(source_path, dest_path)
+        logger.info(f"File copied successfully")
+        
+        logger.info(f"Creating ITADParserMain instance")
         itad_parser_instance = ITADParserMain(app_ids_file=Path(dest_path))
+        
+        logger.info(f"Starting parser.run()")
         itad_parser_instance.run()
         
         logger.info("ITAD parser completed successfully")
     except Exception as e:
         logger.error(f"ITAD parser error: {e}", exc_info=True)
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
     finally:
+        logger.info("Setting itad_parser_running = False")
         itad_parser_running = False
         itad_parser_instance = None
 

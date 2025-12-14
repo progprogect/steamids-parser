@@ -355,14 +355,22 @@ def run_itad_parser_in_thread(app_ids_file: Path):
         itad_parser_running = True
         logger.info(f"Starting ITAD parser with app_ids file: {app_ids_file}")
         
-        # Копируем файл в стандартное место
+        # Копируем файл в стандартное место (если это разные файлы)
         import shutil
+        import os
         source_path = str(app_ids_file) if isinstance(app_ids_file, Path) else app_ids_file
         dest_path = str(config.APP_IDS_FILE) if isinstance(config.APP_IDS_FILE, Path) else config.APP_IDS_FILE
         
-        logger.info(f"Copying file from {source_path} to {dest_path}")
-        shutil.copy2(source_path, dest_path)
-        logger.info(f"File copied successfully")
+        # Проверяем, не являются ли это одним и тем же файлом
+        source_normalized = os.path.normpath(os.path.abspath(source_path))
+        dest_normalized = os.path.normpath(os.path.abspath(dest_path))
+        
+        if source_normalized == dest_normalized:
+            logger.info(f"Source and destination are the same file ({source_normalized}), skipping copy")
+        else:
+            logger.info(f"Copying file from {source_path} to {dest_path}")
+            shutil.copy2(source_path, dest_path)
+            logger.info(f"File copied successfully")
         
         logger.info(f"Creating ITADParserMain instance")
         itad_parser_instance = ITADParserMain(app_ids_file=Path(dest_path))

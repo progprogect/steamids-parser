@@ -616,41 +616,101 @@ def stop_itad_parser():
 
 @app.route('/database/clear/ccu_history', methods=['POST'])
 def clear_ccu_history():
-    """Очистить таблицу ccu_history"""
+    """Очистить таблицу ccu_history - прямое подключение для надежности"""
     try:
-        from database import Database
-        db = Database()
+        import psycopg2
+        import urllib.parse as urlparse
+        import os
+        
+        # Получаем URL базы данных
+        database_url = os.getenv("DATABASE_URL") or os.getenv("DATABASE_PUBLIC_URL")
+        if not database_url:
+            return jsonify({
+                'status': 'error',
+                'error': 'DATABASE_URL not found'
+            }), 500
+        
+        # Парсим URL и подключаемся напрямую
+        result = urlparse.urlparse(database_url)
+        conn = None
+        
         try:
-            # Получаем размер таблицы перед очисткой
-            size_before = db.get_table_size('ccu_history')
+            conn = psycopg2.connect(
+                database=result.path[1:],
+                user=result.username,
+                password=result.password,
+                host=result.hostname,
+                port=result.port or 5432,
+                connect_timeout=30
+            )
+            conn.autocommit = False
+            cursor = conn.cursor()
             
-            # Очищаем таблицу
-            success = db.clear_ccu_history()
+            # Получаем размер и количество записей перед очисткой
+            cursor.execute("SELECT COUNT(*) FROM ccu_history")
+            row_count_before = cursor.fetchone()[0]
             
-            if success:
-                # Выполняем VACUUM для освобождения места (PostgreSQL)
-                if db.use_postgresql:
-                    cursor = db._get_cursor()
-                    cursor.execute("VACUUM FULL ccu_history")
-                    db.get_connection().commit()
-                
-                size_after = db.get_table_size('ccu_history')
-                
-                return jsonify({
-                    'status': 'success',
-                    'message': 'ccu_history table cleared successfully',
-                    'size_before': size_before,
-                    'size_after': size_after
-                }), 200
-            else:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Failed to clear ccu_history table'
-                }), 500
+            cursor.execute("""
+                SELECT 
+                    pg_size_pretty(pg_total_relation_size('ccu_history')) as total_size,
+                    pg_size_pretty(pg_relation_size('ccu_history')) as table_size
+            """)
+            size_before = cursor.fetchone()
+            
+            # Очищаем таблицу (TRUNCATE быстрее и сразу освобождает место)
+            logger.info(f"Clearing ccu_history table ({row_count_before:,} records)")
+            cursor.execute("TRUNCATE TABLE ccu_history RESTART IDENTITY CASCADE")
+            conn.commit()
+            
+            # Проверяем результат
+            cursor.execute("SELECT COUNT(*) FROM ccu_history")
+            row_count_after = cursor.fetchone()[0]
+            
+            cursor.execute("""
+                SELECT 
+                    pg_size_pretty(pg_total_relation_size('ccu_history')) as total_size,
+                    pg_size_pretty(pg_relation_size('ccu_history')) as table_size
+            """)
+            size_after = cursor.fetchone()
+            
+            cursor.close()
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'ccu_history table cleared successfully',
+                'row_count_before': row_count_before,
+                'row_count_after': row_count_after,
+                'size_before': {
+                    'total': size_before[0],
+                    'table': size_before[1]
+                },
+                'size_after': {
+                    'total': size_after[0],
+                    'table': size_after[1]
+                }
+            }), 200
+            
+        except psycopg2.OperationalError as e:
+            logger.error(f"Database connection error: {e}")
+            return jsonify({
+                'status': 'error',
+                'error': f'Database connection failed: {str(e)}',
+                'hint': 'Database may be starting up or disk is full. Try again in a few minutes.'
+            }), 503
+        except Exception as e:
+            logger.error(f"Error clearing ccu_history: {e}", exc_info=True)
+            if conn:
+                conn.rollback()
+            return jsonify({
+                'status': 'error',
+                'error': str(e)
+            }), 500
         finally:
-            db.close()
+            if conn:
+                conn.close()
+                
     except Exception as e:
-        logger.error(f"Error clearing ccu_history: {e}", exc_info=True)
+        logger.error(f"Error in clear_ccu_history endpoint: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
             'error': str(e)

@@ -517,6 +517,61 @@ class Database:
         
         self.get_connection().commit()
     
+    def clear_ccu_history(self):
+        """Clear all data from ccu_history table"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # Use TRUNCATE for PostgreSQL (faster) or DELETE for SQLite
+            if self.use_postgresql:
+                # TRUNCATE is faster and doesn't require VACUUM
+                cursor.execute("TRUNCATE TABLE ccu_history RESTART IDENTITY CASCADE")
+            else:
+                cursor.execute("DELETE FROM ccu_history")
+            
+            conn.commit()
+            logger.info("Cleared ccu_history table")
+            return True
+        except Exception as e:
+            logger.error(f"Error clearing ccu_history: {e}")
+            try:
+                conn = self.get_connection()
+                conn.rollback()
+            except:
+                pass
+            return False
+    
+    def get_table_size(self, table_name: str) -> Dict:
+        """Get table size information"""
+        cursor = self._get_cursor()
+        try:
+            if self.use_postgresql:
+                # Use format string for table name in PostgreSQL (safe for known table names)
+                cursor.execute(f"""
+                    SELECT 
+                        pg_size_pretty(pg_total_relation_size('{table_name}')) as total_size,
+                        pg_size_pretty(pg_relation_size('{table_name}')) as table_size,
+                        pg_size_pretty(pg_total_relation_size('{table_name}') - pg_relation_size('{table_name}')) as indexes_size,
+                        (SELECT COUNT(*) FROM {table_name}) as row_count
+                """)
+                result = cursor.fetchone()
+                return {
+                    "total_size": result[0],
+                    "table_size": result[1],
+                    "indexes_size": result[2],
+                    "row_count": result[3]
+                }
+            else:
+                # SQLite - use parameterized query for safety
+                cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+                row_count = cursor.fetchone()[0]
+                # SQLite doesn't have easy size calculation, return row count only
+                return {"row_count": row_count}
+        except Exception as e:
+            logger.error(f"Error getting table size for {table_name}: {e}")
+            return {}
+    
     def close(self):
         """Close database connection"""
         if self.conn:

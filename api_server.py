@@ -614,6 +614,49 @@ def stop_itad_parser():
         }), 500
 
 
+@app.route('/database/clear/ccu_history', methods=['POST'])
+def clear_ccu_history():
+    """Очистить таблицу ccu_history"""
+    try:
+        from database import Database
+        db = Database()
+        try:
+            # Получаем размер таблицы перед очисткой
+            size_before = db.get_table_size('ccu_history')
+            
+            # Очищаем таблицу
+            success = db.clear_ccu_history()
+            
+            if success:
+                # Выполняем VACUUM для освобождения места (PostgreSQL)
+                if db.use_postgresql:
+                    cursor = db._get_cursor()
+                    cursor.execute("VACUUM FULL ccu_history")
+                    db.get_connection().commit()
+                
+                size_after = db.get_table_size('ccu_history')
+                
+                return jsonify({
+                    'status': 'success',
+                    'message': 'ccu_history table cleared successfully',
+                    'size_before': size_before,
+                    'size_after': size_after
+                }), 200
+            else:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Failed to clear ccu_history table'
+                }), 500
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Error clearing ccu_history: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
 @app.route('/itad/export', methods=['GET'])
 def export_itad_data():
     """Экспорт ITAD результатов в CSV"""

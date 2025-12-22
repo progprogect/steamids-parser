@@ -717,6 +717,103 @@ def clear_ccu_history():
         }), 500
 
 
+@app.route('/itad/retry-errors', methods=['POST'])
+def retry_itad_errors():
+    """Сбросить статус ошибок и запустить повторную обработку App ID с ошибками"""
+    global itad_parser_thread, itad_parser_running
+    
+    if itad_parser_running:
+        return jsonify({
+            'error': 'ITAD parser is already running',
+            'status': 'running'
+        }), 400
+    
+    try:
+        from database import Database
+        db = Database()
+        
+        try:
+            cursor = db._get_cursor()
+            
+            # Получаем количество App ID с ошибками
+            if db.use_postgresql:
+                cursor.execute("""
+                    SELECT COUNT(*) FROM app_status 
+                    WHERE status = 'itad_error'
+                """)
+            else:
+                cursor.execute("""
+                    SELECT COUNT(*) FROM app_status 
+                    WHERE status = 'itad_error'
+                """)
+            
+            row = cursor.fetchone()
+            if db.use_postgresql and isinstance(row, dict):
+                error_count = row.get('count', 0) or 0
+            else:
+                error_count = row[0] if row else 0
+            
+            if error_count == 0:
+                return jsonify({
+                    'status': 'no_errors',
+                    'message': 'No App IDs with errors found'
+                }), 200
+            
+            # Сбрасываем статус ошибок на 'pending' для повторной обработки
+            # При этом существующие данные в price_history сохранятся благодаря ON CONFLICT DO NOTHING
+            if db.use_postgresql:
+                cursor.execute("""
+                    UPDATE app_status 
+                    SET status = 'pending', 
+                        itad_error = NULL,
+                        itad_price_processed = 0,
+                        itad_currencies_checked = NULL
+                    WHERE status = 'itad_error'
+                """)
+            else:
+                cursor.execute("""
+                    UPDATE app_status 
+                    SET status = 'pending', 
+                        itad_error = NULL,
+                        itad_price_processed = 0,
+                        itad_currencies_checked = NULL
+                    WHERE status = 'itad_error'
+                """)
+            
+            db.get_connection().commit()
+            logger.info(f"Reset status for {error_count} App IDs with errors")
+            
+        finally:
+            db.close()
+        
+        # Используем существующий файл app_ids.txt
+        default_filepath = Path(config.APP_IDS_FILE)
+        if not default_filepath.exists():
+            return jsonify({
+                'error': 'app_ids.txt file not found. Please upload it first.'
+            }), 400
+        
+        # Запускаем ITAD парсер в отдельном потоке
+        itad_parser_thread = threading.Thread(
+            target=run_itad_parser_in_thread,
+            args=(default_filepath,),
+            daemon=True
+        )
+        itad_parser_thread.start()
+        
+        return jsonify({
+            'status': 'started',
+            'message': f'Retrying {error_count} App IDs with errors',
+            'note': 'Existing price data will be preserved, new data will be added'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error retrying ITAD errors: {e}", exc_info=True)
+        return jsonify({
+            'error': str(e)
+        }), 500
+
+
 @app.route('/itad/export', methods=['GET'])
 def export_itad_data():
     """Экспорт ITAD результатов в CSV"""

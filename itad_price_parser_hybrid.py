@@ -125,9 +125,14 @@ class ITADPriceParserHybrid:
             self._save_to_database(all_records)
             logger.info(f"Saved {len(all_records)} records to database for batch {batch_number}")
         
+        # Calculate statistics
+        stats['processed'] = len(app_ids) - len(errors)  # Successfully processed apps
+        stats['errors'] = len(errors)
+        
         if errors:
-            stats['errors'] = len(errors)
             logger.warning(f"Failed to fetch history for {len(errors)} games in batch {batch_number}")
+        
+        logger.info(f"Batch {batch_number} completed: {stats['processed']} processed, {stats['errors']} errors")
         
         return stats
     

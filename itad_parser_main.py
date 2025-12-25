@@ -84,6 +84,11 @@ class ITADParserMain:
             # Initialize app IDs in database
             self.checkpoint_manager.initialize_app_ids(app_ids)
             
+            # Reset apps stuck in 'itad_processing' status (from previous interrupted runs)
+            reset_count = self.checkpoint_manager.reset_stuck_processing_apps()
+            if reset_count > 0:
+                logger.info(f"Reset {reset_count} apps from 'itad_processing' to 'pending' for retry")
+            
             # Get pending app IDs only from loaded list (for resume support)
             # Filter to only process the app_ids we loaded
             logger.info(f"Getting pending app IDs from database...")
@@ -116,14 +121,16 @@ class ITADParserMain:
             # Process batches
             total_processed = 0
             total_errors = 0
+            batches_completed = 0
             
             for batch_num, batch_app_ids in enumerate(batches, 1):
                 if not self.running:
-                    logger.info("Parser stopped by user")
+                    logger.info("Parser stopped by user signal (self.running = False)")
+                    logger.info(f"Processed {batch_num - 1}/{total_batches} batches before stop")
                     break
                 
                 logger.info(f"\n{'='*70}")
-                logger.info(f"Processing batch {batch_num}/{total_batches}")
+                logger.info(f"Processing batch {batch_num}/{total_batches} ({len(batch_app_ids)} app IDs)")
                 logger.info(f"{'='*70}")
                 
                 try:
@@ -134,8 +141,13 @@ class ITADParserMain:
                     # Parse batch (checkpoint is updated inside parse_price_history_batch)
                     stats = self.parser.parse_price_history_batch(batch_app_ids, batch_num)
                     
-                    total_processed += stats.get('processed', 0)
-                    total_errors += stats.get('errors', 0)
+                    batch_processed = stats.get('processed', 0)
+                    batch_errors = stats.get('errors', 0)
+                    
+                    total_processed += batch_processed
+                    total_errors += batch_errors
+                    
+                    logger.info(f"Batch {batch_num} summary: {batch_processed} processed, {batch_errors} errors")
                     
                     # Save checkpoint
                     self.checkpoint_manager.save_checkpoint()
@@ -143,23 +155,45 @@ class ITADParserMain:
                     # Display progress
                     self.progress_tracker.display_statistics(force=True)
                     
+                    batches_completed = batch_num
+                    
+                    # Check if parser was stopped during batch processing
+                    if not self.running:
+                        logger.warning("Parser was stopped during batch processing")
+                        break
+                    
+                except KeyboardInterrupt:
+                    logger.info("Parser interrupted by user (KeyboardInterrupt)")
+                    self.running = False
+                    self.parser.running = False
+                    break
+                    
                 except Exception as e:
                     logger.error(f"Error processing batch {batch_num}: {e}", exc_info=True)
                     total_errors += len(batch_app_ids)
                     
                     # Mark batch as error
                     for app_id in batch_app_ids:
-                        self.checkpoint_manager.mark_itad_error(app_id, str(e))
+                        self.checkpoint_manager.mark_itad_error(app_id, f"Batch processing error: {str(e)}")
                     
                     # Save checkpoint even on error
                     self.checkpoint_manager.save_checkpoint()
+                    
+                    # Continue with next batch instead of stopping
+                    logger.info(f"Continuing with next batch after error in batch {batch_num}")
             
             # Final summary
             logger.info(f"\n{'='*70}")
-            logger.info("PARSING COMPLETED")
+            if not self.running:
+                logger.info("PARSING STOPPED (not completed)")
+            else:
+                logger.info("PARSING COMPLETED")
             logger.info(f"{'='*70}")
-            logger.info(f"Total processed: {total_processed}")
-            logger.info(f"Total errors: {total_errors}")
+            logger.info(f"Batches processed: {batches_completed}/{total_batches}")
+            logger.info(f"Total apps processed successfully: {total_processed}")
+            logger.info(f"Total apps with errors: {total_errors}")
+            if batches_completed < total_batches:
+                logger.info(f"Remaining batches: {total_batches - batches_completed}")
             logger.info(f"{'='*70}\n")
             
         except Exception as e:

@@ -174,6 +174,38 @@ class CheckpointManager:
         """Mark ITAD error for app_id"""
         self.mark_app_error(app_id, 'itad', error_message)
     
+    def reset_stuck_processing_apps(self) -> int:
+        """
+        Reset apps stuck in 'itad_processing' status back to 'pending'
+        This is useful when parser was interrupted and needs to resume
+        
+        Returns:
+            Number of apps reset
+        """
+        conn = self.database.get_connection()
+        cursor = conn.cursor()
+        
+        if self.database.use_postgresql:
+            cursor.execute("""
+                UPDATE app_status 
+                SET status = 'pending'
+                WHERE status = 'itad_processing'
+            """)
+        else:
+            cursor.execute("""
+                UPDATE app_status 
+                SET status = 'pending'
+                WHERE status = 'itad_processing'
+            """)
+        
+        count = cursor.rowcount
+        conn.commit()
+        
+        if count > 0:
+            logger.info(f"Reset {count} apps from 'itad_processing' to 'pending' status")
+        
+        return count
+    
     def get_pending_itad_app_ids(self) -> List[int]:
         """Get list of app IDs pending ITAD processing"""
         conn = self.database.get_connection()

@@ -83,7 +83,13 @@ class ITADPriceParserHybrid:
         stats['currencies_found'] = sum(len(currencies) for currencies in available_currencies.values())
         
         avg_currencies = stats['currencies_found'] / len(app_ids) if app_ids else 0
+        games_with_currencies = sum(1 for currencies in available_currencies.values() if currencies)
+        games_without_currencies = len(app_ids) - games_with_currencies
+        
         logger.info(f"Determined available currencies: avg {avg_currencies:.1f} per game")
+        logger.info(f"Games with currencies found: {games_with_currencies}/{len(app_ids)}")
+        if games_without_currencies > 0:
+            logger.warning(f"Games without any currencies: {games_without_currencies} (these will be marked as errors)")
         
         # Step 3: Fetch history only for available currencies (parallel)
         all_records = []
@@ -99,8 +105,8 @@ class ITADPriceParserHybrid:
             currencies = available_currencies.get(app_id, set())
             if not currencies:
                 logger.debug(f"No currencies found for app_id {app_id}")
-                # Mark currencies as checked even if none found
-                self.checkpoint_manager.mark_itad_currencies_checked(app_id, [])
+                # Mark as error - no currencies available in ITAD
+                self.checkpoint_manager.mark_itad_error(app_id, "No currencies found in ITAD")
                 errors.append(app_id)
                 continue
             
@@ -172,18 +178,32 @@ class ITADPriceParserHybrid:
                 )
                 
                 if storelow_result:
+                    games_with_lows = 0
+                    games_with_matching_currency = 0
+                    
                     for game in storelow_result:
                         # app_id is already added by get_store_lowest_prices
                         app_id = game.get('app_id')
                         lows = game.get('lows', [])
                         
                         if app_id and lows:
+                            games_with_lows += 1
                             # Check if currency matches
                             for low in lows:
                                 low_currency = low.get('price', {}).get('currency', '').upper()
                                 if low_currency == currency.upper():
                                     available_currencies[app_id].add(currency)
+                                    games_with_matching_currency += 1
                                     break
+                    
+                    # Логируем статистику для диагностики (только для первых нескольких валют)
+                    if currency in list(self.currencies)[:3]:  # Только для первых 3 валют
+                        logger.debug(f"Currency {currency} ({country}): {len(storelow_result)} games returned, "
+                                   f"{games_with_lows} with lows, {games_with_matching_currency} matching currency")
+                else:
+                    # Логируем если результат пустой (только для первых валют)
+                    if currency in list(self.currencies)[:3]:
+                        logger.debug(f"Currency {currency} ({country}): storelow returned None or empty")
                 
             except Exception as e:
                 logger.error(f"Error determining currencies for {currency}: {e}")

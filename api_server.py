@@ -395,6 +395,31 @@ def run_itad_parser_in_thread(app_ids_file: Path):
         itad_parser_instance = None
 
 
+def run_steam_parser_in_thread():
+    """Запуск Steam парсера в отдельном потоке"""
+    global steam_parser_instance, steam_parser_running
+    
+    try:
+        steam_parser_running = True
+        logger.info("Starting Steam price parser")
+        
+        logger.info("Creating SteamParserMain instance")
+        steam_parser_instance = SteamParserMain()
+        
+        logger.info("Starting parser.run()")
+        steam_parser_instance.run()
+        
+        logger.info("Steam parser completed successfully")
+    except Exception as e:
+        logger.error(f"Steam parser error: {e}", exc_info=True)
+        import traceback
+        traceback.print_exc()
+    finally:
+        steam_parser_running = False
+        steam_parser_instance = None
+        logger.info("Steam parser thread finished")
+
+
 @app.route('/itad/start', methods=['POST'])
 def start_itad_parser():
     """Запуск ITAD парсера с файлом app_ids"""

@@ -17,6 +17,7 @@ from werkzeug.utils import secure_filename
 import config
 from parser import SteamDBParser
 from itad_parser_main import ITADParserMain
+from steam_parser_main import SteamParserMain
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
@@ -31,6 +32,11 @@ parser_running = False
 itad_parser_instance = None
 itad_parser_thread = None
 itad_parser_running = False
+
+# Глобальное состояние Steam парсера
+steam_parser_instance = None
+steam_parser_thread = None
+steam_parser_running = False
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -866,6 +872,146 @@ def export_itad_data():
         logger.error(f"Error exporting ITAD data: {e}", exc_info=True)
         return jsonify({
             'error': str(e)
+        }), 500
+
+
+@app.route('/steam/start', methods=['POST'])
+def start_steam_parser():
+    """Запуск Steam парсера для App IDs с ошибками"""
+    global steam_parser_thread, steam_parser_running
+    
+    if steam_parser_running:
+        return jsonify({
+            'error': 'Steam parser is already running',
+            'status': 'running'
+        }), 400
+    
+    try:
+        # Проверяем количество App IDs с ошибками
+        from database import Database
+        db = Database()
+        
+        try:
+            cursor = db._get_cursor()
+            
+            if db.use_postgresql:
+                cursor.execute("""
+                    SELECT COUNT(*) FROM app_status 
+                    WHERE status = 'itad_error'
+                """)
+            else:
+                cursor.execute("""
+                    SELECT COUNT(*) FROM app_status 
+                    WHERE status = 'itad_error'
+                """)
+            
+            row = cursor.fetchone()
+            if db.use_postgresql and isinstance(row, dict):
+                error_count = row.get('count', 0) or 0
+            else:
+                error_count = row[0] if row else 0
+            
+            if error_count == 0:
+                return jsonify({
+                    'status': 'no_errors',
+                    'message': 'No App IDs with errors found'
+                }), 200
+            
+        finally:
+            db.close()
+        
+        # Запускаем Steam парсер в отдельном потоке
+        steam_parser_thread = threading.Thread(
+            target=run_steam_parser_in_thread,
+            daemon=True
+        )
+        steam_parser_thread.start()
+        
+        return jsonify({
+            'status': 'started',
+            'message': f'Steam parser started for {error_count} App IDs with errors'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error starting Steam parser: {e}", exc_info=True)
+        return jsonify({
+            'error': str(e)
+        }), 500
+
+
+@app.route('/steam/stop', methods=['POST'])
+def stop_steam_parser():
+    """Остановка Steam парсера"""
+    global steam_parser_instance, steam_parser_running
+    
+    if not steam_parser_running:
+        return jsonify({
+            'status': 'not_running',
+            'message': 'Steam parser is not running'
+        }), 200
+    
+    try:
+        if steam_parser_instance:
+            steam_parser_instance.stop()
+        
+        return jsonify({
+            'status': 'stopping',
+            'message': 'Steam parser stop signal sent'
+        }), 200
+    except Exception as e:
+        logger.error(f"Error stopping Steam parser: {e}", exc_info=True)
+        return jsonify({
+            'error': str(e)
+        }), 500
+
+
+@app.route('/steam/status', methods=['GET'])
+def steam_status():
+    """Получить статус Steam парсинга"""
+    try:
+        from database import Database
+        db = Database()
+        
+        try:
+            # Получаем количество App IDs с ошибками
+            cursor = db._get_cursor()
+            
+            if db.use_postgresql:
+                cursor.execute("""
+                    SELECT COUNT(*) FROM app_status 
+                    WHERE status = 'itad_error'
+                """)
+            else:
+                cursor.execute("""
+                    SELECT COUNT(*) FROM app_status 
+                    WHERE status = 'itad_error'
+                """)
+            
+            row = cursor.fetchone()
+            if db.use_postgresql and isinstance(row, dict):
+                error_count = row.get('count', 0) or 0
+            else:
+                error_count = row[0] if row else 0
+            
+            # Получаем общую статистику цен
+            stats = db.get_statistics()
+            
+        finally:
+            db.close()
+        
+        return jsonify({
+            'parser_running': steam_parser_running,
+            'statistics': {
+                'error_app_ids': error_count,
+                'total_price_records': stats.get('price_records', 0)
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting Steam status: {e}", exc_info=True)
+        return jsonify({
+            'error': str(e),
+            'parser_running': steam_parser_running
         }), 500
 
 

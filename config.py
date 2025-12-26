@@ -83,6 +83,11 @@ ITAD_PARALLEL_THREADS = 3  # Number of parallel threads for history requests (re
 ITAD_HISTORY_SINCE = "2012-01-01T00:00:00Z"  # Start date for price history
 STEAM_SHOP_ID = 61  # Steam shop ID in ITAD
 
+# Steam Store API settings
+STEAM_PARSER_THREADS = 30  # Number of parallel threads for Steam API requests (~50 requests/sec)
+STEAM_BATCH_SIZE = 200  # Number of app IDs per batch
+STEAM_BATCH_DELAY = 0.1  # Delay between batches (seconds)
+
 # Logging
 LOG_FILE = LOGS_DIR / "parser.log"
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
